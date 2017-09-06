@@ -54,6 +54,7 @@ class RoverState():
         self.nav_rock_angles = None # Angles of rock terrain pixels
         self.nav_rock_dists = None # Distances of rock terrain pixels
         self.saw_rock = False
+        self.debug = ""
         self.ground_truth = ground_truth_3d # Ground truth worldmap
         self.mode = 'forward' # Current mode (can be forward or stop)
         self.throttle_set = 0.2 # Throttle setting when accelerating
@@ -63,7 +64,8 @@ class RoverState():
         # when you can keep going and when you should stop.  Feel free to
         # get creative in adding new fields or modifying these!
         self.stop_forward = 50 # Threshold to initiate stopping
-        self.go_forward = 500 # Threshold to go forward again
+        # self.go_forward = 500 # Threshold to go forward again
+        self.go_forward = 4000 # Threshold to go forward again
         self.max_vel = 2 # Maximum velocity (meters/second)
         # Image output from perception step
         # Update this image to display your intermediate analysis steps

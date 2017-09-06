@@ -221,9 +221,10 @@ def perception_step(Rover):
         rock_x, rock_y = rover_coords(rock_map)
         rock_x_world, rock_y_world = pix_to_world(rock_x, rock_y, Rover.pos[0], Rover.pos[1], Rover.yaw, world_size, scale)
         Rover.worldmap[rock_y_world, rock_x_world, :] = 255
-        Rover.saw_rock = True
-    else:
-        Rover.saw_rock = False
+
+        rock_dist, rock_angles = to_polar_coords(rocks_x_rover, rocks_y_rover)
+        Rover.nav_rock_dists = rock_dist
+        Rover.nav_rock_angles = rock_angles
 
     # 8) Convert rover-centric pixel positions to polar coordinates
     # Update Rover pixel distances and angles
@@ -233,8 +234,12 @@ def perception_step(Rover):
     Rover.nav_dists = navigable_dist
     Rover.nav_angles = navigable_angles
 
-    rock_dist, rock_angles = to_polar_coords(rocks_x_rover, rocks_y_rover)
-    Rover.nav_rock_dists = rock_dist
-    Rover.nav_rock_angles = rock_angles
+
+    if rock_map.any():
+        if np.mean(Rover.nav_rock_dists) < 10:
+            Rover.mode = 'goto_rock'
+            print("Saw rock")
+    else:
+        Rover.mode = 'forward'
 
     return Rover
