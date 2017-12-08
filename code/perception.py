@@ -1,6 +1,11 @@
 import numpy as np
 import cv2
 
+class Parm:
+    cutoff = 1
+class Cell:
+    UNKNOWN, FREE, OBSTACLE, ROCK = range(4)
+
 # Identify pixels above the threshold
 # Threshold of RGB > 160 does a nice job of identifying ground pixels only
 def color_thresh_navigable(img, rgb_thresh=(160, 160, 160)):
@@ -211,8 +216,10 @@ def perception_step(Rover):
         # Example: Rover.worldmap[obstacle_y_world, obstacle_x_world, 0] += 1
         #          Rover.worldmap[rock_y_world, rock_x_world, 1] += 1
         #          Rover.worldmap[navigable_y_world, navigable_x_world, 2] += 1
+    Rover.bitmap[navigable_y_world, navigable_x_world] = Cell.FREE
     Rover.worldmap[navigable_y_world, navigable_x_world, 2] = 255
     Rover.worldmap[obs_y_world, obs_x_world, 0] = 255
+    Rover.bitmap[obs_y_world, obs_x_world] = Cell.OBSTACLE
     nav_pix = Rover.worldmap[:,:,2] > 0
     Rover.worldmap[nav_pix, 0] = 0
 
@@ -221,6 +228,7 @@ def perception_step(Rover):
         rock_x, rock_y = rover_coords(rock_map)
         rock_x_world, rock_y_world = pix_to_world(rock_x, rock_y, Rover.pos[0], Rover.pos[1], Rover.yaw, world_size, scale)
         Rover.worldmap[rock_y_world, rock_x_world, :] = 255
+        Rover.bitmap[rock_y_world, rock_x_world] = Cell.ROCK
 
         rock_dist, rock_angles = to_polar_coords(rocks_x_rover, rocks_y_rover)
         Rover.nav_rock_dists = rock_dist
@@ -241,5 +249,51 @@ def perception_step(Rover):
             print("Saw rock")
     else:
         Rover.mode = 'forward'
+    goal_dist, goal_angle = overmind()
 
     return Rover
+
+@static_vars(last_message="")
+def overmind(Rover):
+    # Step 1: Walk straight ahead until non-FREE cell hit
+    fstep = np.sqrt(2)
+    fwd_xpos, fwd_ypos, num_fsteps = straight_walker(Rover.pos[0], Rover.pos[1], Rover.yaw, fstep)
+    '''
+    xpos = Rover.pos[0] + fstep * np.sin(Rover.yaw)
+    ypos = Rover.pos[1] + fstep * np.cos(Rover.yaw)
+    xcell, ycell = int(xpos), int(ypos) #round down to get cell index
+    num_fsteps = 1
+    while True:
+        if Rover.bitmap(ycell, xcell)) == Cell.FREE:
+            last_xpos, last_ypos = xpos, ypos
+            xpos = xpos + fstep * np.sin(Rover.yaw)
+            ypos = ypos + fstep * np.cos(Rover.yaw)
+            xcell, ycell = int(xpos), int(ypos) #round down to get cell index
+            num_fsteps += 1
+        else:
+            break;
+    '''
+    if (num_fsteps >= Parm.cutoff):
+        message = "Straight walker is %d %d".format(xcell, ycell)
+        if last_message != message:
+            print message
+            overmind.last_message = message
+
+        # Step 2: Walk in horizontal line perpendicular to Rover heading and
+        # compute the midpoint between obstacles, if any
+        fwd_dist = fstep * num_fsteps
+        hstep = fstep / 2 # walk for half diagonal
+        left_xpos, left_ypos = horizontal_walker(fwd_xpos, fwd_ypos, hstep, 'left')
+        right_xpos, right_ypos = horizontal_walker(fwd_xpos, fwd_ypos, hstep, 'right')
+        target_xpos, target_ypos = midpoint(left_xpos, left_ypos, right_xpos, right_ypos)
+    else:
+        # Closest pathline is less than cutoff, do a turn-in-place cw
+        Rover.mode = 'tip'
+
+def midpoint(p1_x, p1_y, p2_x, p2_y):
+    mid_x = (p2_x - p1_x) / 2 + p1_x
+    mid_y = (p2_y - p1_y) / 2 + p1_y
+    return mid_x, mid_y
+
+if __name__=="__main__":
+   main()
