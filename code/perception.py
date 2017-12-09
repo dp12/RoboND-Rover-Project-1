@@ -258,41 +258,48 @@ def straight_walker(Rover, fstep):
     xpos, ypos = Rover.pos[0], Rover.pos[1]
     num_fsteps = 0
     while True:
-        xpos = xpos + fstep * np.sin(Rover.yaw)
-        ypos = ypos + fstep * np.cos(Rover.yaw)
+        # yaw is defined as ccw from positive x-axis
+        xpos = xpos + fstep * np.cos(Rover.yaw)
+        ypos = ypos + fstep * np.sin(Rover.yaw)
         xcell, ycell = int(xpos), int(ypos) #round down to get cell index
         if Rover.bitmap(ycell, xcell) == Cell.FREE:
             end_xpos, end_ypos = xpos, ypos
             num_fsteps += 1
         else:
+            print("Straight walker terminated at %f %f with %d" % (end_xpos, end_ypos, num_fsteps))
             break;
     return end_xpos, end_ypos, num_fsteps
 
 def horizontal_walker(Rover, fwd_xpos, fwd_ypos, fwd_dist, hstep, side):
     # Get by pythagorean theorem
     hdist = 0
-    xpos, ypos = fwd_xpos, fwd_ypos
+    num_hsteps = 0
+    xpos, ypos = Rover.pos[0], Rover.pos[1]
     while True:
         hdist += hstep
-        hstep_angle = np.atan2(hdist / fwd_dist)
+        num_hsteps += 1
+        hstep_angle = np.atan(hdist / fwd_dist)
+        # yaw is defined as ccw from positive x-axis
         if side == 'left':
-            target_world_angle = Rover.yaw - hstep_angle
-        elif side == 'right':
             target_world_angle = Rover.yaw + hstep_angle
+        elif side == 'right':
+            target_world_angle = Rover.yaw - hstep_angle
         else:
             raise ValueError
         r = np.sqrt((fwd_dist)**2 + hdist**2)
-        xpos = r * np.sin(target_world_angle)
-        ypos = r * np.cos(target_world_angle)
+        xpos = r * np.cos(target_world_angle) + Rover.pos[0]
+        ypos = r * np.sin(target_world_angle) + Rover.pos[1]
         xcell, ycell = int(xpos), int(ypos) #round down to get cell index
-        if Rover.bitmap(ycell, xcell) == Cell.OBSTACLE:
+        if Rover.bitmap(ycell, xcell) == Cell.OBSTACLE or hdist > (10*hstep):
             # or if max hdist exceeded
+            print("Horizontal walker terminated at %f %f with %d steps obs=%r" % (xpos, ypos, num_hsteps, Rover.bitmap(ycell, xcell) == Cell.OBSTACLE))
             break;
     return xpos, ypos
 
 def midpoint(p1_x, p1_y, p2_x, p2_y):
     mid_x = (p2_x - p1_x) / 2 + p1_x
     mid_y = (p2_y - p1_y) / 2 + p1_y
+    print("Midpoint of %f,%f and %f,%f is %f,%f" % (p1_x, p1_y, p2_x, p2_y, mid_x, mid_y))
     return mid_x, mid_y
 
 @static_vars(last_message="")
