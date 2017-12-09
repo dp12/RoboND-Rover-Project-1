@@ -253,6 +253,48 @@ def perception_step(Rover):
 
     return Rover
 
+def straight_walker(Rover, fstep):
+    end_xpos, end_ypos = Rover.pos[0], Rover.pos[1]
+    xpos, ypos = Rover.pos[0], Rover.pos[1]
+    num_fsteps = 0
+    while True:
+        xpos = xpos + fstep * np.sin(Rover.yaw)
+        ypos = ypos + fstep * np.cos(Rover.yaw)
+        xcell, ycell = int(xpos), int(ypos) #round down to get cell index
+        if Rover.bitmap(ycell, xcell) == Cell.FREE:
+            end_xpos, end_ypos = xpos, ypos
+            num_fsteps += 1
+        else:
+            break;
+    return end_xpos, end_ypos, num_fsteps
+
+def horizontal_walker(Rover, fwd_xpos, fwd_ypos, fwd_dist, hstep, side):
+    # Get by pythagorean theorem
+    hdist = 0
+    xpos, ypos = fwd_xpos, fwd_ypos
+    while True:
+        hdist += hstep
+        hstep_angle = np.atan2(hdist / fwd_dist)
+        if side == 'left':
+            target_world_angle = Rover.yaw - hstep_angle
+        elif side == 'right':
+            target_world_angle = Rover.yaw + hstep_angle
+        else:
+            raise ValueError
+        r = np.sqrt((fwd_dist)**2 + hdist**2)
+        xpos = r * np.sin(target_world_angle)
+        ypos = r * np.cos(target_world_angle)
+        xcell, ycell = int(xpos), int(ypos) #round down to get cell index
+        if Rover.bitmap(ycell, xcell) == Cell.OBSTACLE:
+            # or if max hdist exceeded
+            break;
+    return xpos, ypos
+
+def midpoint(p1_x, p1_y, p2_x, p2_y):
+    mid_x = (p2_x - p1_x) / 2 + p1_x
+    mid_y = (p2_y - p1_y) / 2 + p1_y
+    return mid_x, mid_y
+
 @static_vars(last_message="")
 def overmind(Rover):
     # Step 1: Walk straight ahead until non-FREE cell hit
@@ -264,7 +306,7 @@ def overmind(Rover):
     xcell, ycell = int(xpos), int(ypos) #round down to get cell index
     num_fsteps = 1
     while True:
-        if Rover.bitmap(ycell, xcell)) == Cell.FREE:
+        if Rover.bitmap(ycell, xcell) == Cell.FREE:
             last_xpos, last_ypos = xpos, ypos
             xpos = xpos + fstep * np.sin(Rover.yaw)
             ypos = ypos + fstep * np.cos(Rover.yaw)
@@ -289,11 +331,6 @@ def overmind(Rover):
     else:
         # Closest pathline is less than cutoff, do a turn-in-place cw
         Rover.mode = 'tip'
-
-def midpoint(p1_x, p1_y, p2_x, p2_y):
-    mid_x = (p2_x - p1_x) / 2 + p1_x
-    mid_y = (p2_y - p1_y) / 2 + p1_y
-    return mid_x, mid_y
 
 if __name__=="__main__":
    main()
