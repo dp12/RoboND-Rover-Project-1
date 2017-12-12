@@ -1,5 +1,16 @@
 import numpy as np
 
+# Returns False when done, else true
+def update_tip(Rover):
+    if update_tip.spin == 'cw':
+        if Rover.yaw < update_tip.angle:
+            return False
+    elif update_tip.spin == 'ccw'
+        if Rover.yaw > update_tip.angle:
+            return False
+    return True
+update_tip.angle = 0
+update_tip.spin = 'cw'
 
 # This is where you can build a decision tree for determining throttle, brake and steer
 # commands based on the output of the perception_step() function
@@ -11,6 +22,10 @@ def decision_step(Rover):
 
     # Example:
     # Check if we have vision data to make decisions with
+    if Rover.motion_mode = "tip":
+        if not update_tip(Rover):
+            Rover.motion_mode = "goto-cell"
+
     if Rover.nav_angles is not None:
         # Check for Rover.mode status
         if Rover.mode == 'forward':

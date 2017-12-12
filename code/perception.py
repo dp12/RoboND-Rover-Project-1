@@ -127,9 +127,10 @@ def perception_step_ipython(img):
     ])
     # 2) Apply perspective transform
     warped, mask = perspect_transform(img, source, destination)
-    lookahead = 4 * 10 # 4 meters * 10 pixels/meter
-    mask[0:(grid_img.shape[0] - bottom_offset - lookahead),:] = 0
-    warped = np.absolute(np.float32(warped - 1)) * mask
+	# Uncomment the below to limit the lookahead
+    #lookahead = 4 * 10 # 4 meters * 10 pixels/meter
+    #mask[0:(grid_img.shape[0] - bottom_offset - lookahead),:] = 0
+    #warped = np.absolute(np.float32(warped - 1)) * mask
 
     # 3) Apply color threshold to identify navigable terrain/obstacles/rock samples
     threshed_rocks = color_thresh_rock(warped)
@@ -233,11 +234,11 @@ def perception_step(Rover):
         # Example: Rover.worldmap[obstacle_y_world, obstacle_x_world, 0] += 1
         #          Rover.worldmap[rock_y_world, rock_x_world, 1] += 1
         #          Rover.worldmap[navigable_y_world, navigable_x_world, 2] += 1
-    Rover.bitmap[navigable_y_world, navigable_x_world] = Cell.FREE
     Rover.worldmap[navigable_y_world, navigable_x_world, 2] = 255
     Rover.worldmap[obs_y_world, obs_x_world, 0] = 255
     Rover.bitmap[obs_y_world, obs_x_world] = Cell.OBSTACLE
     Rover.bitmap[int(Rover.pos[1]), int(Rover.pos[0])] = Cell.SELF
+    Rover.bitmap[navigable_y_world, navigable_x_world] = Cell.FREE
     nav_pix = Rover.worldmap[:,:,2] > 0
     Rover.worldmap[nav_pix, 0] = 0
 
