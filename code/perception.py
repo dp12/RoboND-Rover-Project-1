@@ -1,11 +1,26 @@
 import numpy as np
+import matplotlib.pyplot as plt
 import cv2
 
 class Parm:
-    cutoff = 1
-class Cell:
-    UNKNOWN, FREE, OBSTACLE, ROCK = range(4)
+    cutoff = 10
 
+class Cell:
+    UNKNOWN, FREE, OBSTACLE, ROCK, SELF = range(5)
+
+class BitmapPlot:
+    def __init__(self, bitmap):
+        plt.ion()
+        self.fig = plt.figure()
+
+    def update(self):
+        self.fig.canvas.draw()
+
+# plt.ion()
+# global fig = plt.figure()
+# global fig = plt.figure()
+# global ax = f.gca()
+# ax.plot(Rover.bitmap)
 # Identify pixels above the threshold
 # Threshold of RGB > 160 does a nice job of identifying ground pixels only
 def color_thresh_navigable(img, rgb_thresh=(160, 160, 160)):
@@ -170,6 +185,8 @@ def perception_step_ipython(img):
 # cmd /k "activate robond & python drive_rover.py"
 # Apply the above functions in succession and update the Rover state accordingly
 def perception_step(Rover):
+    image_init = True
+    gridmap = None
     # Perform perception steps to update Rover()
     # TODO:
     # NOTE: camera image is coming to you in Rover.img
@@ -220,6 +237,7 @@ def perception_step(Rover):
     Rover.worldmap[navigable_y_world, navigable_x_world, 2] = 255
     Rover.worldmap[obs_y_world, obs_x_world, 0] = 255
     Rover.bitmap[obs_y_world, obs_x_world] = Cell.OBSTACLE
+    Rover.bitmap[int(Rover.pos[1]), int(Rover.pos[0])] = Cell.SELF
     nav_pix = Rover.worldmap[:,:,2] > 0
     Rover.worldmap[nav_pix, 0] = 0
 
@@ -249,9 +267,26 @@ def perception_step(Rover):
             print("Saw rock")
     else:
         Rover.mode = 'forward'
-    goal_dist, goal_angle = overmind()
+    if Rover.last_yaw != Rover.yaw:
+        goal_dist, goal_angle = overmind(Rover)
+        if perception_step.image_init:
+            perception_step.gridmap = plt.imshow(Rover.bitmap)
+            plt.show()
+            perception_step.image_init = False
+
+        else:
+            perception_step.gridmap.set_data(Rover.bitmap)
+            plt.draw()
+
+        # plt.matshow(Rover.bitmap)
+        # fig.canvas.redraw()
+        print("Done with planning")
+        print("-"*30)
+        Rover.last_yaw = Rover.yaw
 
     return Rover
+perception_step.image_init = True
+perception_step.gridmap = None
 
 def straight_walker(Rover, fstep):
     end_xpos, end_ypos = Rover.pos[0], Rover.pos[1]
@@ -259,40 +294,44 @@ def straight_walker(Rover, fstep):
     num_fsteps = 0
     while True:
         # yaw is defined as ccw from positive x-axis
-        xpos = xpos + fstep * np.cos(Rover.yaw)
-        ypos = ypos + fstep * np.sin(Rover.yaw)
+        xpos = xpos + fstep * np.cos(np.radians(Rover.yaw))
+        ypos = ypos + fstep * np.sin(np.radians(Rover.yaw))
         xcell, ycell = int(xpos), int(ypos) #round down to get cell index
-        if Rover.bitmap(ycell, xcell) == Cell.FREE:
+        if Rover.bitmap[ycell, xcell] == Cell.FREE:
             end_xpos, end_ypos = xpos, ypos
             num_fsteps += 1
         else:
             print("Straight walker terminated at %f %f with %d" % (end_xpos, end_ypos, num_fsteps))
+            print("tmp: start loc %d,%d" % (int(Rover.pos[0]), int(Rover.pos[1])))
+            print("tmp: Boundary cell %d,%d is %d" % (xcell, ycell, Rover.bitmap[ycell, xcell]))
             break;
     return end_xpos, end_ypos, num_fsteps
 
-def horizontal_walker(Rover, fwd_xpos, fwd_ypos, fwd_dist, hstep, side):
-    # Get by pythagorean theorem
+def horizontal_walker(Rover, fwd_dist, hstep, side):
     hdist = 0
     num_hsteps = 0
     xpos, ypos = Rover.pos[0], Rover.pos[1]
     while True:
         hdist += hstep
         num_hsteps += 1
-        hstep_angle = np.atan(hdist / fwd_dist)
+        # Get by pythagorean theorem
+        hstep_angle = np.arctan(hdist / fwd_dist)
         # yaw is defined as ccw from positive x-axis
         if side == 'left':
-            target_world_angle = Rover.yaw + hstep_angle
+            target_world_angle = np.radians(Rover.yaw) + hstep_angle
         elif side == 'right':
-            target_world_angle = Rover.yaw - hstep_angle
+            target_world_angle = np.radians(Rover.yaw) - hstep_angle
         else:
             raise ValueError
         r = np.sqrt((fwd_dist)**2 + hdist**2)
         xpos = r * np.cos(target_world_angle) + Rover.pos[0]
         ypos = r * np.sin(target_world_angle) + Rover.pos[1]
         xcell, ycell = int(xpos), int(ypos) #round down to get cell index
-        if Rover.bitmap(ycell, xcell) == Cell.OBSTACLE or hdist > (10*hstep):
+        # if Rover.bitmap[ycell, xcell] == Cell.OBSTACLE or hdist > (10*hstep):
+        print("tmp: hw %s walker at %d,%d" % (side, xcell, ycell))
+        if Rover.bitmap[ycell, xcell] != Cell.FREE or hdist > (10*hstep):
             # or if max hdist exceeded
-            print("Horizontal walker terminated at %f %f with %d steps obs=%r" % (xpos, ypos, num_hsteps, Rover.bitmap(ycell, xcell) == Cell.OBSTACLE))
+            print("Horizontal walker terminated at %f %f with %d steps obs=%d" % (xpos, ypos, num_hsteps, Rover.bitmap[ycell, xcell]))
             break;
     return xpos, ypos
 
@@ -302,11 +341,12 @@ def midpoint(p1_x, p1_y, p2_x, p2_y):
     print("Midpoint of %f,%f and %f,%f is %f,%f" % (p1_x, p1_y, p2_x, p2_y, mid_x, mid_y))
     return mid_x, mid_y
 
-@static_vars(last_message="")
 def overmind(Rover):
+    target_xpos = 0
+    target_ypos = 0
     # Step 1: Walk straight ahead until non-FREE cell hit
     fstep = np.sqrt(2)
-    fwd_xpos, fwd_ypos, num_fsteps = straight_walker(Rover.pos[0], Rover.pos[1], Rover.yaw, fstep)
+    fwd_xpos, fwd_ypos, num_fsteps = straight_walker(Rover, fstep)
     '''
     xpos = Rover.pos[0] + fstep * np.sin(Rover.yaw)
     ypos = Rover.pos[1] + fstep * np.cos(Rover.yaw)
@@ -322,22 +362,27 @@ def overmind(Rover):
         else:
             break;
     '''
-    if (num_fsteps >= Parm.cutoff):
-        message = "Straight walker is %d %d".format(xcell, ycell)
-        if last_message != message:
-            print message
-            overmind.last_message = message
+    if (True or num_fsteps >= Parm.cutoff):
+        print("tmp: %d >= %d" % (num_fsteps, Parm.cutoff))
+        message = "Straight walker is %f %f".format(fwd_xpos, fwd_ypos)
+        # if overmind.last_message != message:
+        #     print(message)
+        #     overmind.last_message = message
 
         # Step 2: Walk in horizontal line perpendicular to Rover heading and
         # compute the midpoint between obstacles, if any
         fwd_dist = fstep * num_fsteps
         hstep = fstep / 2 # walk for half diagonal
-        left_xpos, left_ypos = horizontal_walker(fwd_xpos, fwd_ypos, hstep, 'left')
-        right_xpos, right_ypos = horizontal_walker(fwd_xpos, fwd_ypos, hstep, 'right')
+
+        left_xpos, left_ypos = horizontal_walker(Rover, fwd_dist, hstep, 'left')
+        right_xpos, right_ypos = horizontal_walker(Rover, fwd_dist, hstep, 'right')
         target_xpos, target_ypos = midpoint(left_xpos, left_ypos, right_xpos, right_ypos)
     else:
         # Closest pathline is less than cutoff, do a turn-in-place cw
+        # print("Rover mode is now tip")
         Rover.mode = 'tip'
+    return target_xpos, target_ypos
+# overmind.last_message = ""
 
 if __name__=="__main__":
    main()
