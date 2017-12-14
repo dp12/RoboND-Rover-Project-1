@@ -1,32 +1,74 @@
 import numpy as np
 
-# Returns False when done, else true
+# Returns False when done, else True
 class Tip():
+    # class variables
+    target_deg = 0
+    spin = ""
+    started = False
 
-    def __init__(self, Rover, target_deg, spin):
-        self.Rover = Rover
-        self.target_deg = target_deg
-        self.spin = spin
-        Rover.steer_angle = 15 if self.spin == 'ccw' else -15
+    def start(self, Rover, target_deg, spin):
+        Tip.target_deg = target_deg
+        Tip.spin = spin
+        Tip.started = True
+        Rover.steer_angle = 15 if Tip.spin == 'ccw' else -15
 
     def update(self):
-        if self.spin == 'cw':
-            if self.Rover.yaw < self.target_deg:
+        if Tip.spin == 'cw':
+            if Rover.yaw < Tip.target_deg:
+                print("Tip done %f < %f" % (Rover.yaw, Tip.target_deg))
+                Tip.started = False
+                Rover.steer_angle = 0
                 return False
-        elif self.spin == 'ccw'
-            if self.Rover.yaw > self.target_deg:
+        elif Tip.spin == 'ccw'
+            if Rover.yaw > Tip.target_deg:
+                print("Tip done %f > %f" % (Rover.yaw, Tip.target_deg))
+                Tip.started = False
+                Rover.steer_angle = 0
                 return False
         return True
 
-class Goto():
-    def __init__(self, Rover, target_point, slow_factor):
-        self.Rover = Rover
-        self.start_point = Rover.pos
-        self.target_point = target_point
-        self.slow_factor = slow_factor
+    def pending(self):
+        return Tip.started
 
-    def update(self):
-        Rover.throttle = 1.0 * ()
+class Goto():
+    # constants
+    FAST_SPEED = 0.8
+    DEFAULT_SPEED = 0.3
+    SLOWDOWN_DIST = 2
+    FASTER_DIST = 8
+    TERMINATE_DIST = 0.01
+    SLOWDOWN_FACTOR = 0.5
+
+    # class variables
+    target_point = 0
+    start_point = 0
+    total_dist = 0
+    last_dist = 0
+    started = False
+
+    def start(self, Rover, target_point):
+        Goto.target_point = target_point
+        Goto.start_point = Rover.pos
+        Goto.total_dist = np.linalg.norm(Goto.target_point - Goto.start_point)
+        Goto.last_dist = 0
+        Goto.started = True
+
+    def update(self, Rover):
+        cur_dist = np.linalg.norm(Goto.target_point - Rover.pos)
+        if cur_dist <= Goto.TERMINATE_POINT:
+            print("Goto end w/ cur_dist: %f" % cur_dist)
+            Rover.throttle = 0
+            Goto.started = False
+            return False
+        elif cur_dist <= Goto.SLOWDOWN_DIST:
+            Rover.throttle = 1.0 * (cur_dist / Goto.total_dist) * Goto.SLOWDOWN_FACTOR
+            print("Goto: cur_dist: %f throttle: %f" % (cur_dist, Rover.throttle))
+        elif cur_dist >= Goto.FAST_DIST:
+            Rover.throttle = Goto.FAST_SPEED
+        else:
+            Rover.throttle = Goto.DEFAULT_SPEED
+        return True
 
 # This is where you can build a decision tree for determining throttle, brake and steer
 # commands based on the output of the perception_step() function
@@ -38,9 +80,16 @@ def decision_step(Rover):
 
     # Example:
     # Check if we have vision data to make decisions with
-    decision_step.Tip = Tip(Rover, degrees, 'cw')
-    while Tip.update():
-        pass
+    if decision_step.submode = "tip":
+        if not Tip().started():
+            Tip().start(Rover, degrees, 'cw')
+        elif not Tip().update():
+            decision_step.submode = Rover.submode_queue.pop()
+    elif decision_step.submode = "goto":
+        if not Goto().started():
+            Goto().start(Rover, target_point)
+        elif not Goto().update():
+            decision_step.submode = Rover.submode_queue.pop()
 
     if Rover.nav_angles is not None:
         # Check for Rover.mode status
@@ -135,3 +184,4 @@ def decision_step(Rover):
     #    return
 
     return Rover
+decision_step.submode = ""
