@@ -41,21 +41,21 @@ class Goto():
     SLOWDOWN_FACTOR = 0.5
 
     # class variables
-    target_point = 0
-    start_point = 0
+    target_pt = 0
+    start_pt = 0
     total_dist = 0
     last_dist = 0
     started = False
 
-    def start(self, Rover, target_point):
-        Goto.target_point = target_point
-        Goto.start_point = Rover.pos
-        Goto.total_dist = np.linalg.norm(Goto.target_point - Goto.start_point)
+    def start(self, Rover, target_pt):
+        Goto.target_pt = target_pt
+        Goto.start_pt = Rover.pos
+        Goto.total_dist = np.linalg.norm(Goto.target_pt - Goto.start_pt)
         Goto.last_dist = 0
         Goto.started = True
 
     def update(self, Rover):
-        cur_dist = np.linalg.norm(Goto.target_point - Rover.pos)
+        cur_dist = np.linalg.norm(Goto.target_pt - Rover.pos)
         if cur_dist <= Goto.TERMINATE_POINT:
             print("Goto end w/ cur_dist: %f" % cur_dist)
             Rover.throttle = 0
@@ -70,6 +70,25 @@ class Goto():
             Rover.throttle = Goto.DEFAULT_SPEED
         return True
 
+def point_to_subcmd(Rover, end_pt):
+    SAME_ANGLE_TOLERANCE = 0.5
+    # At the end, we'll always need to goto the point, so push it on the stack
+    subcmd = {"cmd": "goto", "target": end_pt}
+    print("Adding %d,%d goto to queue" % (end_pt[0], end_pt[1]))
+    Rover.subcmd_queue.append(subcmd)
+    # Start with starting pt
+    start_pt = Rover.pos
+    end_pt_angle = np.arctan2((end_pt[1] - start_pt[1]) / (end_pt[0] - start_pt[0]))
+    angle_diff = Rover.yaw - end_pt_angle
+    if angle_diff > SAME_ANGLE_TOLERANCE:
+        # Target point is not in line with where the Rover is pointing. Do a tip
+        # before doing the goto subcommand
+        turn_angle = angle_diff
+        spin = "cw" if turn_angle > 0 else "ccw"
+        subcmd = {"cmd": "tip",  "target": angle_diff, "spin": spin}
+        print("Adding %d %s tip to queue" % (angle_diff, spin))
+        Rover.subcmd_queue.append(subcmd)
+
 # This is where you can build a decision tree for determining throttle, brake and steer
 # commands based on the output of the perception_step() function
 def decision_step(Rover):
@@ -80,16 +99,24 @@ def decision_step(Rover):
 
     # Example:
     # Check if we have vision data to make decisions with
-    if decision_step.submode = "tip":
+    if decision_step.submode = None:
+        if Rover.subcmd_queue:
+            # If there's no subcmd, pop one from the subcmd queue
+            cur_subcmd = Rover.subcmd_queue.pop()
+            decision_step.submode = cur_subcmd["cmd"]
+        else:
+            # Plan subcmd steps with the next point from A* planner
+
+    elif decision_step.submode = "tip":
         if not Tip().started():
-            Tip().start(Rover, degrees, 'cw')
+            Tip().start(Rover, cur_subcmd["target"], cur_subcmd["spin"])
         elif not Tip().update():
-            decision_step.submode = Rover.submode_queue.pop()
+            decision_step.submode = None
     elif decision_step.submode = "goto":
         if not Goto().started():
-            Goto().start(Rover, target_point)
+            Goto().start(Rover, cur_subcmd["target"])
         elif not Goto().update():
-            decision_step.submode = Rover.submode_queue.pop()
+            decision_step.submode = None
 
     if Rover.nav_angles is not None:
         # Check for Rover.mode status

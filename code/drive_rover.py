@@ -38,6 +38,13 @@ ground_truth_3d = np.dstack((ground_truth*0, ground_truth*255, ground_truth*0)).
 # Define RoverState() class to retain rover state parameters
 class RoverState():
     def __init__(self):
+        self.nav_rock_angles = None ### Angles of rock terrain pixels
+        self.nav_rock_dists = None ### Distances of rock terrain pixels
+        self.saw_rock = False ###
+        self.debug = "" ###
+        self.subcmd_queue = []
+        ### END of custom variables
+
         self.start_time = None # To record the start time of navigation
         self.total_time = None # To record total duration of naviagation
         self.img = None # Current camera image
@@ -52,10 +59,6 @@ class RoverState():
         self.brake = 0 # Current brake value
         self.nav_angles = None # Angles of navigable terrain pixels
         self.nav_dists = None # Distances of navigable terrain pixels
-        self.nav_rock_angles = None ### Angles of rock terrain pixels
-        self.nav_rock_dists = None ### Distances of rock terrain pixels
-        self.saw_rock = False ###
-        self.debug = "" ###
         self.ground_truth = ground_truth_3d # Ground truth worldmap
         self.mode = 'forward' # Current mode (can be forward or stop)
         self.throttle_set = 0.2 # Throttle setting when accelerating
