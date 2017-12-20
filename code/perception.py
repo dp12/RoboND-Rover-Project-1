@@ -269,7 +269,9 @@ def perception_step(Rover):
     else:
         Rover.mode = 'forward'
     if Rover.last_yaw != Rover.yaw:
-        goal_dist, goal_angle = overmind(Rover)
+    # if not Rover.target:
+        goal_x, goal_y = overmind(Rover)
+        Rover.target = [goal_x, goal_y]
         if perception_step.image_init:
             perception_step.gridmap = plt.imshow(Rover.bitmap)
             plt.show()

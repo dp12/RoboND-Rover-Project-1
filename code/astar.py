@@ -1,4 +1,6 @@
 # -----------
+# This code is adapted from the Udacity CS373 A* implementation
+#
 # User Instructions:
 #
 # Modify the the search function so that it becomes
@@ -13,10 +15,12 @@
 # the function should return the string 'fail'
 # ----------
 # DONE: use the heapq implementation shown here:
+# DONE: return a list of waypoints
 # profile Python code with line_profiler @profile
 # https://stackoverflow.com/questions/3927628/how-can-i-profile-python-code-line-by-line
 # https://stackoverflow.com/questions/17328506/priorityqueue-is-very-slow
 from heapq import *
+import numpy as np
 
 grid = [[0, 1, 0, 0, 0, 0],
         [0, 1, 0, 0, 0, 0],
@@ -43,7 +47,7 @@ delta_name = ['^', '<', 'v', '>']
 def euclidean_heuristic(start, goal):
     return np.linalg.norm(np.array(goal) - np.array(start))
 
-def search(grid,init,goal,cost,heuristic):
+def astar(grid, init, goal, cost):
     # ----------------------------------------
     # modify the code below
     # ----------------------------------------
@@ -99,4 +103,4 @@ def search(grid,init,goal,cost,heuristic):
     return waypoints
     # return expand
 
-print search(grid,init,goal,cost,heuristic)
+# print search(grid, init, goal, cost, heuristic)

@@ -42,7 +42,8 @@ class RoverState():
         self.nav_rock_dists = None ### Distances of rock terrain pixels
         self.saw_rock = False ###
         self.debug = "" ###
-        self.subcmd_queue = []
+        self.subcmds = []
+        self.target = None
         ### END of custom variables
 
         self.start_time = None # To record the start time of navigation
