@@ -47,15 +47,20 @@ class Goto():
     last_dist = 0
     started = False
 
+    def euclidean_dist(start, end):
+        return np.linalg.norm(np.array(end) - np.array(start))
+
     def start(self, Rover, target_pt):
         Goto.target_pt = target_pt
         Goto.start_pt = Rover.pos
-        Goto.total_dist = np.linalg.norm(Goto.target_pt - Goto.start_pt)
+        # Goto.total_dist = np.linalg.norm(np.array(Goto.target_pt) - np.array(Goto.start_pt))
+        Goto.total_dist = euclidean_dist(Goto.start_pt, Goto.target_pt)
         Goto.last_dist = 0
         Goto.started = True
 
     def update(self, Rover):
-        cur_dist = np.linalg.norm(Goto.target_pt - Rover.pos)
+        # cur_dist = np.linalg.norm(tuple(Goto.target_pt) - tuple(Rover.pos))
+        cur_dist = euclidean_dist(Rover.pos, Goto.target_pt)
         if cur_dist <= Goto.TERMINATE_POINT:
             print("Goto end w/ cur_dist: %f" % cur_dist)
             Rover.throttle = 0
