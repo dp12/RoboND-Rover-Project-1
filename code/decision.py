@@ -1,5 +1,6 @@
 import numpy as np
 from astar import astar, euclidean_heuristic
+from pid import Pid
 
 # Returns False when done, else True
 class Tip():
@@ -7,32 +8,63 @@ class Tip():
     target_deg = 0
     spin = ""
     started = False
+    total_deg = 0
+    Pid = None
+
+    kp = 0.1
+    ki = 0.0
+    kd = 0.0
 
     def start(self, Rover, target_deg, spin):
         Tip.target_deg = target_deg
+        Tip.total_deg = abs(Rover.yaw - target_deg)
         Tip.spin = spin
         Tip.started = True
-        Rover.steer = 15 if Tip.spin == 'ccw' else -15
+        Tip.Pid = Pid(Tip.kp, Tip.ki, Tip.kd, target_deg)
+        # Rover.steer = 15 if Tip.spin == 'ccw' else -15
+        print("Set rover steer to %d" % Rover.steer)
 
     def update(self, Rover):
+        TIP_TOLERANCE = 0.1
         if Tip.spin == 'cw':
             print("Rover steer=%f y=%f" % (Rover.steer, Rover.yaw))
-            if Rover.yaw < Tip.target_deg:
+            if Rover.yaw < Tip.target_deg or abs(Rover.yaw - Tip.target_deg) < TIP_TOLERANCE:
+                Rover.steer = 0
                 print("Tip done %f < %f" % (Rover.yaw, Tip.target_deg))
                 Tip.started = False
-                Rover.steer = 0
                 return False
             else:
-                Rover.steer = 15
+                Rover.steer = Tip.Pid.update(Rover.yaw)
         elif Tip.spin == 'ccw':
             print("Rover steer=%f y=%f" % (Rover.steer, Rover.yaw))
-            if Rover.yaw > Tip.target_deg:
+            if Rover.yaw > Tip.target_deg or abs(Rover.yaw - Tip.target_deg) < TIP_TOLERANCE:
+                Rover.steer = 0
                 print("Tip done %f > %f" % (Rover.yaw, Tip.target_deg))
                 Tip.started = False
-                Rover.steer = 0
                 return False
             else:
-                Rover.steer = 15
+                Rover.steer = Tip.Pid.update(Rover.yaw)
+        # if Tip.spin == 'cw':
+        #     print("Rover steer=%f y=%f" % (Rover.steer, Rover.yaw))
+        #     if Rover.yaw < Tip.target_deg:
+        #         Rover.steer = 0
+        #         print("Tip done %f < %f" % (Rover.yaw, Tip.target_deg))
+        #         Tip.started = False
+        #         return False
+        #     elif Rover.yaw < 0.5 * (Rover.yaw - Tip.target_deg):
+        #         print("Setting steer %f; ratio" % ())
+        #         Rover.steer = 15 * (Rover.yaw - Tip.target_deg) / Tip.total_deg
+        #     else:
+        #         Rover.steer = 15
+        # elif Tip.spin == 'ccw':
+        #     print("Rover steer=%f y=%f" % (Rover.steer, Rover.yaw))
+        #     if Rover.yaw > Tip.target_deg:
+        #         Rover.steer = 0
+        #         print("Tip done %f > %f" % (Rover.yaw, Tip.target_deg))
+        #         Tip.started = False
+        #         return False
+        #     else:
+        #         Rover.steer = 15
         return True
 
 class Goto():
@@ -41,7 +73,8 @@ class Goto():
     DEFAULT_SPEED = 0.3
     SLOWDOWN_DIST = 2
     FAST_DIST = 8
-    TERMINATE_DIST = 0.01
+    # TERMINATE_DIST = 0.01
+    TERMINATE_DIST = 0.39
     SLOWDOWN_FACTOR = 0.5
 
     # class variables
@@ -57,7 +90,6 @@ class Goto():
     def start(self, Rover, target_pt):
         Goto.target_pt = target_pt
         Goto.start_pt = Rover.pos
-        # Goto.total_dist = np.linalg.norm(np.array(Goto.target_pt) - np.array(Goto.start_pt))
         Goto.total_dist = euclidean_heuristic(Goto.start_pt, Goto.target_pt)
         Goto.last_dist = 0
         Goto.started = True
@@ -66,20 +98,20 @@ class Goto():
         # cur_dist = np.linalg.norm(tuple(Goto.target_pt) - tuple(Rover.pos))
         cur_dist = euclidean_heuristic(Rover.pos, Goto.target_pt)
         if cur_dist <= Goto.TERMINATE_DIST:
-            print("Goto end w/ cur_dist: %f" % cur_dist)
+            print("Goto end w/ cur_dist: %f and pos %f,%f" % (cur_dist, Rover.pos[0], Rover.pos[1]))
             Rover.throttle = 0
             Goto.started = False
             return False
         elif cur_dist <= Goto.SLOWDOWN_DIST:
             Rover.throttle = 1.0 * (cur_dist / Goto.total_dist) * Goto.SLOWDOWN_FACTOR
-            print("Goto: cur_dist: %f throttle: %f" % (cur_dist, Rover.throttle))
+            print("Goto: cur_dist: %f throttle: %f cell %d,%d" % (cur_dist, Rover.throttle, int(Rover.pos[0]), int(Rover.pos[1])))
         elif cur_dist >= Goto.FAST_DIST:
             Rover.throttle = Goto.FAST_SPEED
         else:
             Rover.throttle = Goto.DEFAULT_SPEED
         return True
 
-# Clamp angle to range [0,360]
+# Restrict angle to range [0,360]
 def clamp_angle(degrees):
     return degrees + 360 if degrees < 0 else degrees
 
@@ -98,10 +130,9 @@ def point_to_subcmd(Rover, end_pt):
     if abs(angle_diff) > SAME_ANGLE_TOLERANCE:
         # Target point is not in line with where the Rover is pointing. Do a tip
         # before doing the goto subcommand
-        turn_angle = abs(angle_diff)             # abs angle to turn
         spin = "cw" if angle_diff > 0 else "ccw" # determine spin based on sign
-        subcmd = {"cmd": "tip",  "target": turn_angle, "spin": spin}
-        print("Adding %f %s tip to queue" % (turn_angle, spin))
+        subcmd = {"cmd": "tip",  "target": end_pt_angle, "spin": spin}
+        print("Adding %f %s tip to queue" % (end_pt_angle, spin))
         Rover.subcmds.append(subcmd)
 
 # This is where you can build a decision tree for determining throttle, brake and steer
@@ -121,14 +152,14 @@ def decision_step(Rover):
             # decision_step.subcmd = Rover.subcmds.pop()
             # decision_step.subcmd = decision_step.subcmd["cmd"]
             decision_step.subcmd = Rover.subcmds.pop()
-            print("Popping %s cmd with target" % decision_step.subcmd["cmd"]),
+            print("Popping %s cmd with target " % decision_step.subcmd["cmd"], end='')
             print(decision_step.subcmd["target"])
         else:
             ### SUBCMDS FROM WAYPOINTS ###
             # Plan subcmd steps with the next point from A* planner
             if len(decision_step.waypoints) > 0:
                 dest_point = decision_step.waypoints.pop()
-                print("Popping waypoint"),
+                print("Popping waypoint", end='')
                 print(dest_point)
                 point_to_subcmd(Rover, dest_point)
             # If there are no waypoints, plan a path to the target with A*
