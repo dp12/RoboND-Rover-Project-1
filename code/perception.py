@@ -268,11 +268,12 @@ def perception_step(Rover):
             print("Saw rock")
     else:
         Rover.mode = 'forward'
-    if Rover.last_yaw != Rover.yaw:
-    # if not Rover.target:
+    # if Rover.last_yaw != Rover.yaw:
+    if not Rover.target:
         goal_x, goal_y = overmind(Rover)
         Rover.target = [goal_x, goal_y]
         if perception_step.image_init:
+            plt.ion()
             perception_step.gridmap = plt.imshow(Rover.bitmap)
             plt.show()
             perception_step.image_init = False
@@ -280,6 +281,8 @@ def perception_step(Rover):
         else:
             perception_step.gridmap.set_data(Rover.bitmap)
             plt.draw()
+            plt.pause(0.001)
+            #input("Press [enter] to continue.")
 
         # plt.matshow(Rover.bitmap)
         # fig.canvas.redraw()
