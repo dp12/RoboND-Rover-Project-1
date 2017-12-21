@@ -9,9 +9,9 @@ class Tip():
     spin = ""
     started = False
     total_deg = 0
-    Pid = None
 
-    kp = 0.1
+    Pid = None
+    kp = 0.5
     ki = 0.0
     kd = 0.0
 
@@ -44,27 +44,6 @@ class Tip():
                 return False
             else:
                 Rover.steer = Tip.Pid.update(Rover.yaw)
-        # if Tip.spin == 'cw':
-        #     print("Rover steer=%f y=%f" % (Rover.steer, Rover.yaw))
-        #     if Rover.yaw < Tip.target_deg:
-        #         Rover.steer = 0
-        #         print("Tip done %f < %f" % (Rover.yaw, Tip.target_deg))
-        #         Tip.started = False
-        #         return False
-        #     elif Rover.yaw < 0.5 * (Rover.yaw - Tip.target_deg):
-        #         print("Setting steer %f; ratio" % ())
-        #         Rover.steer = 15 * (Rover.yaw - Tip.target_deg) / Tip.total_deg
-        #     else:
-        #         Rover.steer = 15
-        # elif Tip.spin == 'ccw':
-        #     print("Rover steer=%f y=%f" % (Rover.steer, Rover.yaw))
-        #     if Rover.yaw > Tip.target_deg:
-        #         Rover.steer = 0
-        #         print("Tip done %f > %f" % (Rover.yaw, Tip.target_deg))
-        #         Tip.started = False
-        #         return False
-        #     else:
-        #         Rover.steer = 15
         return True
 
 class Goto():
@@ -73,8 +52,9 @@ class Goto():
     DEFAULT_SPEED = 0.3
     SLOWDOWN_DIST = 2
     FAST_DIST = 8
-    # TERMINATE_DIST = 0.01
-    TERMINATE_DIST = 0.39
+    TERMINATE_DIST = 0.05
+    # TD 0.05 kp 0.01
+    # TERMINATE_DIST = 0.2
     SLOWDOWN_FACTOR = 0.5
 
     # class variables
@@ -84,8 +64,13 @@ class Goto():
     last_dist = 0
     started = False
 
-    def euclidean_dist(start, end):
-        return np.linalg.norm(np.array(end) - np.array(start))
+    Pid = None
+    kp = 0.01
+    ki = 0.0
+    kd = 0.0
+
+    # def euclidean_dist(start, end):
+    #     return np.linalg.norm(np.array(end) - np.array(start))
 
     def start(self, Rover, target_pt):
         Goto.target_pt = target_pt
@@ -93,6 +78,7 @@ class Goto():
         Goto.total_dist = euclidean_heuristic(Goto.start_pt, Goto.target_pt)
         Goto.last_dist = 0
         Goto.started = True
+        Goto.Pid = Pid(Goto.kp, Goto.ki, Goto.kd, 0.01)
 
     def update(self, Rover):
         # cur_dist = np.linalg.norm(tuple(Goto.target_pt) - tuple(Rover.pos))
@@ -102,13 +88,17 @@ class Goto():
             Rover.throttle = 0
             Goto.started = False
             return False
-        elif cur_dist <= Goto.SLOWDOWN_DIST:
-            Rover.throttle = 1.0 * (cur_dist / Goto.total_dist) * Goto.SLOWDOWN_FACTOR
-            print("Goto: cur_dist: %f throttle: %f cell %d,%d" % (cur_dist, Rover.throttle, int(Rover.pos[0]), int(Rover.pos[1])))
-        elif cur_dist >= Goto.FAST_DIST:
-            Rover.throttle = Goto.FAST_SPEED
         else:
-            Rover.throttle = Goto.DEFAULT_SPEED
+            # print("Goto: cur_dist: %f throttle: %f cell %d,%d" % (cur_dist, Rover.throttle, int(Rover.pos[0]), int(Rover.pos[1])))
+            print("Goto: cur_dist: %f err %f throttle: %f" % (cur_dist, 0.01 - cur_dist, Rover.throttle))
+            Rover.throttle = Goto.Pid.update(-cur_dist)
+        # elif cur_dist <= Goto.SLOWDOWN_DIST:
+        #     Rover.throttle = 1.0 * (cur_dist / Goto.total_dist) * Goto.SLOWDOWN_FACTOR
+        #     print("Goto: cur_dist: %f throttle: %f cell %d,%d" % (cur_dist, Rover.throttle, int(Rover.pos[0]), int(Rover.pos[1])))
+        # elif cur_dist >= Goto.FAST_DIST:
+        #     Rover.throttle = Goto.FAST_SPEED
+        # else:
+        #     Rover.throttle = Goto.DEFAULT_SPEED
         return True
 
 # Restrict angle to range [0,360]

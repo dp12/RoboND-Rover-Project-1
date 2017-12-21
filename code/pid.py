@@ -5,17 +5,19 @@ class Pid():
         self.kd = kd
         self.set_point = set_point
 
-        self.error_sum = 0.0
+        self.integrated_error = 0.0
         self.last_error = 0.0
 
     def update(self, measurement):
         # Calculate proportional error
         error = self.set_point - measurement
+        if (self.set_point < 0.5):
+            print("pid error %f" % error)
         # Calculate integral error
-        self.error_sum += error
+        self.integrated_error += error
         # Calculate derivative
-        delta_error = error - self.last_error
+        derivative_error = error - self.last_error
         self.last_error = error
 
-        u = (self.kp * error) + (self.ki * self.error_sum) + self.kd * (delta_error)
+        u = (self.kp * error) + (self.ki * self.integrated_error) + self.kd * (derivative_error)
         return u
