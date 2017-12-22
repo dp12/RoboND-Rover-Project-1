@@ -236,9 +236,12 @@ def perception_step(Rover):
         #          Rover.worldmap[navigable_y_world, navigable_x_world, 2] += 1
     Rover.worldmap[navigable_y_world, navigable_x_world, 2] = 255
     Rover.worldmap[obs_y_world, obs_x_world, 0] = 255
-    Rover.bitmap[obs_y_world, obs_x_world] = Cell.OBSTACLE
-    Rover.bitmap[int(Rover.pos[1]), int(Rover.pos[0])] = Cell.SELF
-    Rover.bitmap[navigable_y_world, navigable_x_world] = Cell.FREE
+    # Rover.bitmap[obs_y_world, obs_x_world] = Cell.OBSTACLE
+    # Rover.bitmap[int(Rover.pos[1]), int(Rover.pos[0])] = Cell.SELF
+    # Rover.bitmap[navigable_y_world, navigable_x_world] = Cell.FREE
+    Rover.bitmap[obs_x_world, obs_y_world] = Cell.OBSTACLE
+    Rover.bitmap[int(Rover.pos[0]), int(Rover.pos[1])] = Cell.SELF
+    Rover.bitmap[navigable_x_world, navigable_y_world] = Cell.FREE
     nav_pix = Rover.worldmap[:,:,2] > 0
     Rover.worldmap[nav_pix, 0] = 0
 
@@ -247,7 +250,8 @@ def perception_step(Rover):
         rock_x, rock_y = rover_coords(rock_map)
         rock_x_world, rock_y_world = pix_to_world(rock_x, rock_y, Rover.pos[0], Rover.pos[1], Rover.yaw, world_size, scale)
         Rover.worldmap[rock_y_world, rock_x_world, :] = 255
-        Rover.bitmap[rock_y_world, rock_x_world] = Cell.ROCK
+        # Rover.bitmap[rock_y_world, rock_x_world] = Cell.ROCK
+        Rover.bitmap[rock_x_world, rock_y_world] = Cell.ROCK
 
         rock_dist, rock_angles = to_polar_coords(rocks_x_rover, rocks_y_rover)
         Rover.nav_rock_dists = rock_dist
@@ -274,11 +278,11 @@ def perception_step(Rover):
         Rover.target = [goal_x, goal_y]
         if perception_step.image_init:
             # plt.ion()
-            perception_step.gridmap = plt.imshow(Rover.bitmap, origin='lower')
+            perception_step.gridmap = plt.imshow(Rover.bitmap.T, origin='lower')
             plt.show()
             perception_step.image_init = False
         else:
-            perception_step.gridmap.set_data(Rover.bitmap)
+            perception_step.gridmap.set_data(Rover.bitmap.T, origin='lower')
             plt.draw()
             plt.pause(0.001)
             #input("Press [enter] to continue.")
@@ -302,13 +306,14 @@ def straight_walker(Rover, fstep):
         xpos = xpos + fstep * np.cos(np.radians(Rover.yaw))
         ypos = ypos + fstep * np.sin(np.radians(Rover.yaw))
         xcell, ycell = int(xpos), int(ypos) #round down to get cell index
-        if Rover.bitmap[ycell, xcell] == Cell.FREE:
+        # if Rover.bitmap[ycell, xcell] == Cell.FREE:
+        if Rover.bitmap[xcell, ycell] == Cell.FREE:
             end_xpos, end_ypos = xpos, ypos
             num_fsteps += 1
         else:
             print("Straight walker terminated at %f %f with %d" % (end_xpos, end_ypos, num_fsteps))
             print("tmp: start loc %d,%d" % (int(Rover.pos[0]), int(Rover.pos[1])))
-            print("tmp: Boundary cell %d,%d is %d" % (xcell, ycell, Rover.bitmap[ycell, xcell]))
+            print("tmp: Boundary cell %d,%d is %d" % (xcell, ycell, Rover.bitmap[xcell, ycell]))
             break;
     return end_xpos, end_ypos, num_fsteps
 
@@ -334,7 +339,8 @@ def horizontal_walker(Rover, fwd_dist, hstep, side):
         xcell, ycell = int(xpos), int(ypos) #round down to get cell index
         # if Rover.bitmap[ycell, xcell] == Cell.OBSTACLE or hdist > (10*hstep):
         print("tmp: hw %s walker at %d,%d" % (side, xcell, ycell))
-        if Rover.bitmap[ycell, xcell] != Cell.FREE or hdist > (10*hstep):
+        # if Rover.bitmap[ycell, xcell] != Cell.FREE or hdist > (10*hstep):
+        if Rover.bitmap[xcell, ycell] != Cell.FREE or hdist > (10*hstep):
             # or if max hdist exceeded
             print("Horizontal walker terminated at %f %f with %d steps obs=%d" % (xpos, ypos, num_hsteps, Rover.bitmap[ycell, xcell]))
             break;

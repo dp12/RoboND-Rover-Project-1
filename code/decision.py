@@ -3,7 +3,10 @@
 # - [x] if error begins increasing, stop the goto
 # - [x] ensure throttle is zero during tip and steer is zero during goto
 # - [x] try applying brakes for tip
+# - [x] debug A* strange pathing
+# - [ ] debug getting too close to rocks
 import numpy as np
+import matplotlib.pyplot as plt
 from astar import astar, euclidean_heuristic
 from pid import Pid
 
@@ -18,9 +21,12 @@ class Tip():
     total_deg = 0
 
     Pid = None
-    kp = 0.3
+    kp = 0.35
     ki = 0.0
-    kd = 0.0
+    kd = 0.2
+    # p    i    d
+    #(0.4, 0.0, 0.2) is acceptable speed, but sometimes blows up
+    #(0.35, 0.0, 0.2) is acceptable speed, but sometimes blows up
 
     def start(self, Rover, target_deg, spin):
         Tip.target_deg = target_deg
@@ -95,7 +101,12 @@ class Goto():
     quit_counter = 0
 
     Pid = None
-    kp = 0.01
+    # p    i d
+    # 0.01 0 0 (very slow)
+    # 0.2  0 0 (acceptable)
+    # 0.4  0 0 (appears to do no harm, but may want to be more careful)
+    # 0.1  0 0 (slow and deliberate)
+    kp = 0.1
     ki = 0.0
     kd = 0.0
 
@@ -172,7 +183,7 @@ def point_to_subcmd(Rover, end_pt):
         # spin = "cw" if angle_diff > 0 else "ccw" # determine spin based on sign
         # Compute which spin direction is closest to target heading
         if angle_diff < (360 - end_pt_angle + Rover.yaw):
-            spin = "ccw" 
+            spin = "ccw"
         else:
             spin = "cw"
         subcmd = {"cmd": "tip",  "target": end_pt_angle, "spin": spin}
@@ -200,7 +211,7 @@ def decision_step(Rover):
             ### SUBCMDS FROM WAYPOINTS ###
             # Plan subcmd steps with the next point from A* planner
             if len(decision_step.waypoints) > 0:
-                dest_point = decision_step.waypoints.pop(0)
+                dest_point = decision_step.waypoints.pop()
                 print("Popping waypoint", end='')
                 print(dest_point)
                 print(Rover.pos)
@@ -210,9 +221,15 @@ def decision_step(Rover):
                 ### A* PATH PLANNING ###
                 cur_cell = [int(Rover.pos[0]), int(Rover.pos[1])]
                 dest_cell = [int(Rover.target[0]), int(Rover.target[1])]
-                decision_step.waypoints = astar(Rover.bitmap, cur_cell, dest_cell, 1)
-                print("A* wp:")
-                print(decision_step.waypoints)
+                if cur_cell == dest_cell:
+                    print("Unset target, already at %d,%d" % (cur_cell[0],cur_cell[1]))
+                    Rover.target = None
+                else:
+                    decision_step.waypoints = astar(Rover.bitmap, cur_cell, dest_cell, 1)
+                    print("A* wp:")
+                    print(decision_step.waypoints)
+                    plt.imshow(Rover.bitmap.T, origin='lower')
+                    plt.show()
     elif decision_step.subcmd["cmd"] == "tip":
         if not Tip().started:
             print("Starting %s tip with target %f" % (decision_step.subcmd["spin"], decision_step.subcmd["target"]))
