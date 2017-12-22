@@ -11,8 +11,8 @@ class Pid():
     def update(self, measurement):
         # Calculate proportional error
         error = self.set_point - measurement
-        if (self.set_point < 0.5):
-            print("pid error %f" % error)
+        # if (self.set_point < 0.5):
+        #     print("pid error %f" % error)
         # Calculate integral error
         self.integrated_error += error
         # Calculate derivative
