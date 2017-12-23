@@ -4,7 +4,9 @@
 # - [x] ensure throttle is zero during tip and steer is zero during goto
 # - [x] try applying brakes for tip
 # - [x] debug A* strange pathing
-# - [ ] debug getting too close to rocks
+# - [x] apply brakes when Goto gets to its target
+# - [ ] tune pid
+# - [ ] integrate wall follow behavior and pick up rocks
 import numpy as np
 import matplotlib.pyplot as plt
 from astar import astar, euclidean_heuristic
@@ -23,10 +25,12 @@ class Tip():
     Pid = None
     kp = 0.35
     ki = 0.0
-    kd = 0.2
+    kd = 0.6
     # p    i    d
     #(0.4, 0.0, 0.2) is acceptable speed, but sometimes blows up
     #(0.35, 0.0, 0.2) is acceptable speed, but sometimes blows up
+    #(0.35, 0.0, 0.4) increases the speed of convergence
+    #(0.35, 0.0, 0.8) once went crazy between 0, 360
 
     def start(self, Rover, target_deg, spin):
         Tip.target_deg = target_deg
@@ -36,11 +40,12 @@ class Tip():
         Tip.did_start_brake = False
         Tip.Pid = Pid(Tip.kp, Tip.ki, Tip.kd, target_deg)
         Rover.throttle = 0
-        # Rover.steer = 15 if Tip.spin == 'ccw' else -15
         print("Set rover steer to %d" % Rover.steer)
 
     def update(self, Rover):
-        TIP_TOLERANCE = 0.01
+        # TIP_TOLERANCE = 0.01 (too fine)
+        # TIP_TOLERANCE = 0.1 (good, but still takes time to converge)
+        TIP_TOLERANCE = 0.5
         if not Tip.did_start_brake:
             # If Rover is not stopped
             # if Rover.vel <= 0 and Tip.brake_counter >= 10:
@@ -87,7 +92,6 @@ class Goto():
     SLOWDOWN_DIST = 2
     FAST_DIST = 8
     # TERMINATE_DIST = 0.05
-    # TD 0.05 kp 0.01
     # TERMINATE_DIST = 0.2
     TERMINATE_DIST = 0.05
     SLOWDOWN_FACTOR = 0.5
@@ -99,6 +103,7 @@ class Goto():
     last_dist = 0
     started = False
     quit_counter = 0
+    do_finishing_brake = False
 
     Pid = None
     # p    i d
@@ -106,9 +111,9 @@ class Goto():
     # 0.2  0 0 (acceptable)
     # 0.4  0 0 (appears to do no harm, but may want to be more careful)
     # 0.1  0 0 (slow and deliberate)
-    kp = 0.1
+    kp = 0.4
     ki = 0.0
-    kd = 0.0
+    kd = 0.2
 
     # def euclidean_dist(start, end):
     #     return np.linalg.norm(np.array(end) - np.array(start))
@@ -120,6 +125,7 @@ class Goto():
         Goto.last_dist = 0
         Goto.started = True
         Goto.quit_counter = 0
+        Goto.do_finishing_brake = False
         Goto.Pid = Pid(Goto.kp, Goto.ki, Goto.kd, 0.0)
         Rover.steer = 0
 
@@ -127,19 +133,30 @@ class Goto():
         DIST_ERROR_LIMIT = 3
         # cur_dist = np.linalg.norm(tuple(Goto.target_pt) - tuple(Rover.pos))
         cur_dist = euclidean_heuristic(Rover.pos, Goto.target_pt)
-        if cur_dist <= Goto.TERMINATE_DIST:
-            print("Goto end w/ cur_dist: %f and pos %f,%f" % (cur_dist, Rover.pos[0], Rover.pos[1]))
+        if Goto.do_finishing_brake:
+            Rover.brake = Rover.brake_set
             Rover.throttle = 0
-            Goto.started = False
-            return False
+            if Rover.vel <= 0:
+                Goto.do_finishing_brake = False
+                Goto.started = False
+                Rover.brake = 0
+                print("Goto brake done")
+                return False
+        elif cur_dist <= Goto.TERMINATE_DIST:
+            print("Goto end w/ cur_dist: %f and pos %f,%f" % (cur_dist, Rover.pos[0], Rover.pos[1]))
+            Goto.do_finishing_brake = True
+            # Rover.throttle = 0
+            # Goto.started = False
+            # return False
         elif cur_dist > Goto.last_dist:
             Goto.quit_counter += 1
             print("Goto quit cnt:%d" % Goto.quit_counter)
             if Goto.quit_counter >= DIST_ERROR_LIMIT:
                 print("Goto end b/c >>error w/ cur_dist: %f and pos %f,%f" % (cur_dist, Rover.pos[0], Rover.pos[1]))
-                Rover.throttle = 0
-                Goto.started = False
-                return False
+                Goto.do_finishing_brake = True
+                # Rover.throttle = 0
+                # Goto.started = False
+                # return False
         else:
             # print("Goto: cur_dist: %f throttle: %f cell %d,%d" % (cur_dist, Rover.throttle, int(Rover.pos[0]), int(Rover.pos[1])))
             print("Goto: cur_dist: %f err %f throttle: %f" % (cur_dist, 0.01 - cur_dist, Rover.throttle))
@@ -162,10 +179,10 @@ def clamp_angle(degrees):
     return degrees + 360 if degrees < 0 else degrees
 
 def point_to_subcmd(Rover, end_pt):
-    SAME_ANGLE_TOLERANCE = 0.5
+    SAME_ANGLE_TOLERANCE = 1 #prev 0.5
     if int(Rover.pos[0]) == end_pt[0] and int(Rover.pos[1]) == end_pt[1]:
         print("Skip wp %d,%d already reached" % (end_pt[0], end_pt[1]))
-        return
+        return False
     # At the end, we'll always need to goto the point, so push it on the stack
     subcmd = {"cmd": "goto", "target": end_pt}
     print("Adding %d,%d goto to queue" % (end_pt[0], end_pt[1]))
@@ -215,13 +232,20 @@ def decision_step(Rover):
                 print("Popping waypoint", end='')
                 print(dest_point)
                 print(Rover.pos)
-                point_to_subcmd(Rover, dest_point)
+                success = point_to_subcmd(Rover, dest_point)
+                if not success and len(decision_step.waypoints) <= 1:
+                    print("Unset target b/c already at waypoint")
+                    Rover.target = None
             # If there are no waypoints, plan a path to the target with A*
+            # if there is no target, then unset it
             elif Rover.target:
                 ### A* PATH PLANNING ###
                 cur_cell = [int(Rover.pos[0]), int(Rover.pos[1])]
                 dest_cell = [int(Rover.target[0]), int(Rover.target[1])]
-                if cur_cell == dest_cell:
+                print("No wp, cur cell and dest cell are ", end='')
+                print(cur_cell)
+                print(dest_cell)
+                if cur_cell[0] == dest_cell[0] or cur_cell[1] == dest_cell[1]:
                     print("Unset target, already at %d,%d" % (cur_cell[0],cur_cell[1]))
                     Rover.target = None
                 else:

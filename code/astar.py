@@ -84,7 +84,7 @@ def astar(grid, init, goal, cost):
         if len(open) == 0:
             resign = True
             print("A* failed")
-            return None
+            return []
         else:
             next = heappop(open)
             x = next[3]

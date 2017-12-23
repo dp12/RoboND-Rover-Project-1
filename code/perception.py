@@ -276,15 +276,17 @@ def perception_step(Rover):
     if not Rover.target:
         goal_x, goal_y = overmind(Rover)
         Rover.target = [goal_x, goal_y]
-        if perception_step.image_init:
-            # plt.ion()
-            perception_step.gridmap = plt.imshow(Rover.bitmap.T, origin='lower')
-            plt.show()
-            perception_step.image_init = False
-        else:
-            perception_step.gridmap.set_data(Rover.bitmap.T, origin='lower')
-            plt.draw()
-            plt.pause(0.001)
+        plt.imshow(Rover.bitmap.T, origin='lower')
+        plt.show()
+        # if perception_step.image_init:
+        #     # plt.ion()
+        #     perception_step.gridmap = plt.imshow(Rover.bitmap.T, origin='lower')
+        #     plt.show()
+        #     perception_step.image_init = False
+        # else:
+        #     perception_step.gridmap.set_data(Rover.bitmap.T, origin='lower')
+        #     plt.draw()
+        #     plt.pause(0.001)
             #input("Press [enter] to continue.")
 
         # plt.matshow(Rover.bitmap)
