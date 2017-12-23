@@ -166,20 +166,19 @@ def perception_step(Rover):
         #          Rover.worldmap[navigable_y_world, navigable_x_world, 2] += 1
     Rover.worldmap[navigable_y_world, navigable_x_world, 2] = 255
     Rover.worldmap[obs_y_world, obs_x_world, 0] = 255
-    # Rover.bitmap[obs_y_world, obs_x_world] = Cell.OBSTACLE
-    # Rover.bitmap[int(Rover.pos[1]), int(Rover.pos[0])] = Cell.SELF
-    # Rover.bitmap[navigable_y_world, navigable_x_world] = Cell.FREE
     Rover.bitmap[obs_x_world, obs_y_world] = Cell.OBSTACLE
-    Rover.bitmap[int(Rover.pos[0]), int(Rover.pos[1])] = Cell.SELF
-    Rover.bitmap[navigable_x_world, navigable_y_world] = Cell.FREE
     nav_pix = Rover.worldmap[:,:,2] > 0
     Rover.worldmap[nav_pix, 0] = 0
+
+    Rover.bitmap[int(Rover.pos[0]), int(Rover.pos[1])] = Cell.SELF
+    Rover.bitmap[navigable_x_world, navigable_y_world] = Cell.FREE
 
     rock_map = color_thresh_rock(warped)
     if rock_map.any():
         rock_x, rock_y = rover_coords(rock_map)
         rock_x_world, rock_y_world = pix_to_world(rock_x, rock_y, Rover.pos[0], Rover.pos[1], Rover.yaw, world_size, scale)
         Rover.worldmap[rock_y_world, rock_x_world, :] = 255
+
         # Rover.bitmap[rock_y_world, rock_x_world] = Cell.ROCK
         Rover.bitmap[rock_x_world, rock_y_world] = Cell.ROCK
 
