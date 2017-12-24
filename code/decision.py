@@ -5,12 +5,16 @@
 # - [x] try applying brakes for tip
 # - [x] debug A* strange pathing
 # - [x] apply brakes when Goto gets to its target
-# - [ ] tune pid
-# - [ ] integrate wall follow behavior and pick up rocks
+# - [x] tune pid
+# - [x] integrate wall follow behavior
+# - [ ] get stuck mode working
+# - [ ] add pickup rock routine
 import numpy as np
 import matplotlib.pyplot as plt
 from astar import astar, euclidean_heuristic
 from pid import Pid
+import time
+
 
 # Returns False when done, else True
 class Tip():
@@ -19,6 +23,7 @@ class Tip():
     spin = ""
     started = False
     did_start_brake = False
+    start_yaw = 0
     brake_counter = 0
     total_deg = 0
 
@@ -38,6 +43,7 @@ class Tip():
         Tip.spin = spin
         Tip.started = True
         Tip.did_start_brake = False
+        Tip.start_yaw = Rover.yaw
         Tip.Pid = Pid(Tip.kp, Tip.ki, Tip.kd, target_deg)
         Rover.throttle = 0
         print("Set rover steer to %d" % Rover.steer)
@@ -50,16 +56,20 @@ class Tip():
             # If Rover is not stopped
             # if Rover.vel <= 0 and Tip.brake_counter >= 10:
             if Rover.vel <= 0:
+                print("Tip skipping starting brake")
                 Tip.did_start_brake = True
                 Rover.brake = 0
             else:
+                print("Tip starting brake")
                 Rover.brake = Rover.brake_set
+                Rover.throttle = 0
         elif Tip.spin == 'cw':
             print("Rover steer=%f y=%f" % (Rover.steer, Rover.yaw))
             # if Rover.yaw < Tip.target_deg or abs(Rover.yaw - Tip.target_deg) < TIP_TOLERANCE:
-            if abs(Rover.yaw - Tip.target_deg) < TIP_TOLERANCE:
+            cw_angle_exceeded = ((Tip.target_deg <= Tip.start_yaw) and (Rover.yaw < Tip.target_deg)) or ((Tip.target_deg > Tip.start_yaw) and (Rover.yaw > Tip.start_yaw) and (Rover.yaw < Tip.target_deg))
+            if abs(Rover.yaw - Tip.target_deg) < TIP_TOLERANCE or cw_angle_exceeded:
                 Rover.steer = 0
-                print("Tip done %f < %f" % (Rover.yaw, Tip.target_deg))
+                print("Tip done %f < %f exc=%d" % (Rover.yaw, Tip.target_deg, cw_angle_exceeded))
                 Tip.started = False
                 return False
             else:
@@ -69,9 +79,10 @@ class Tip():
         elif Tip.spin == 'ccw':
             print("Rover steer=%f y=%f" % (Rover.steer, Rover.yaw))
             # if Rover.yaw > Tip.target_deg or abs(Rover.yaw - Tip.target_deg) < TIP_TOLERANCE:
-            if abs(Rover.yaw - Tip.target_deg) < TIP_TOLERANCE:
+            ccw_angle_exceeded = ((Tip.target_deg >= Tip.start_yaw) and (Rover.yaw > Tip.target_deg)) or ((Tip.target_deg < Tip.start_yaw) and (Rover.yaw < Tip.start_yaw) and (Rover.yaw > Tip.target_deg))
+            if abs(Rover.yaw - Tip.target_deg) < TIP_TOLERANCE or ccw_angle_exceeded:
                 Rover.steer = 0
-                print("Tip done %f > %f" % (Rover.yaw, Tip.target_deg))
+                print("Tip done %f > %f exc=%d" % (Rover.yaw, Tip.target_deg, ccw_angle_exceeded))
                 Tip.started = False
                 return False
             else:
@@ -80,10 +91,10 @@ class Tip():
                 Rover.brake = 0
         return True
 
-def clamp_throttle(throttle):
-    if throttle < -1.0:  return -1.0
-    elif throttle > 1.0: return 1.0
-    else:                return throttle
+# def clamp_throttle(throttle):
+#     if throttle < -1.0:  return -1.0
+#     elif throttle > 1.0: return 1.0
+#     else:                return throttle
 
 class Goto():
     # constants
@@ -162,7 +173,8 @@ class Goto():
             print("Goto: cur_dist: %f err %f throttle: %f" % (cur_dist, 0.01 - cur_dist, Rover.throttle))
             # Rover.throttle = clamp_throttle(Goto.Pid.update(-cur_dist))
             # Negate the PID output since the control output is negative
-            Rover.throttle = -clamp_throttle(Goto.Pid.update(cur_dist))
+            # Rover.throttle = -clamp_throttle(Goto.Pid.update(cur_dist))
+            Rover.throttle = -np.clip(Goto.Pid.update(cur_dist), -1.0, 1.0)
             Goto.quit_counter = 0
         Goto.last_dist = cur_dist
         # elif cur_dist <= Goto.SLOWDOWN_DIST:
@@ -216,150 +228,179 @@ def decision_step(Rover):
     # improve on this decision tree to do a good job of navigating autonomously!
 
     # Example:
+    # Check for stuck condition
+    STUCK_DETECTION_TIME = 5 #seconds
+    if Rover.mode != "stuck":
+        if Rover.throttle > 0 and abs(Rover.steer) > 2 and Rover.vel <= 0.15:
+            print("Stuck maybe thr=%f steer=%f vel=%f" % (Rover.throttle, abs(Rover.steer), Rover.vel))
+            if not decision_step.stuck_timestamp:
+                print("Stuck timeout started")
+                decision_step.stuck_timestamp = time.time()
+                decision_step.stuck_pos = Rover.pos
+            elif ((time.time() - decision_step.stuck_timestamp) > STUCK_DETECTION_TIME and (int(Rover.pos[0]) == int(decision_step.stuck_pos[0]) or
+                int(Rover.pos[1]) == int(decision_step.stuck_pos[1]))):
+                print("Stuck mode activation")
+                Rover.mode = "stuck"
+        elif Rover.vel >= 0.2:
+            print("Stuck timestamp reset")
+            decision_step.stuck_timestamp = None
+
     # Check if we have vision data to make decisions with
-    if decision_step.subcmd == None:
-        if Rover.subcmds:
-            ### CURRENT SUBCMD ###
-            # If there's no subcmd, pop one from the subcmd queue
-            decision_step.subcmd = Rover.subcmds.pop()
-            print("Popping %s cmd with target " % decision_step.subcmd["cmd"], end='')
-            print(decision_step.subcmd["target"])
-        else:
-            ### SUBCMDS FROM WAYPOINTS ###
-            # Plan subcmd steps with the next point from A* planner
-            if len(decision_step.waypoints) > 0:
-                dest_point = decision_step.waypoints.pop()
-                print("Popping waypoint", end='')
-                print(dest_point)
-                print(Rover.pos)
-                success = point_to_subcmd(Rover, dest_point)
-                if not success and len(decision_step.waypoints) <= 1:
-                    print("Unset target b/c already at waypoint")
-                    Rover.target = None
-            # If there are no waypoints, plan a path to the target with A*
-            # if there is no target, then unset it
-            elif Rover.target:
-                ### A* PATH PLANNING ###
-                cur_cell = [int(Rover.pos[0]), int(Rover.pos[1])]
-                dest_cell = [int(Rover.target[0]), int(Rover.target[1])]
-                print("No wp, cur cell and dest cell are ", end='')
-                print(cur_cell)
-                print(dest_cell)
-                if cur_cell[0] == dest_cell[0] or cur_cell[1] == dest_cell[1]:
-                    print("Unset target, already at %d,%d" % (cur_cell[0],cur_cell[1]))
-                    Rover.target = None
-                else:
-                    decision_step.waypoints = astar(Rover.bitmap, cur_cell, dest_cell, 1)
-                    print("A* wp:")
-                    print(decision_step.waypoints)
-                    plt.imshow(Rover.bitmap.T, origin='lower')
-                    plt.show()
-    elif decision_step.subcmd["cmd"] == "tip":
+    if decision_step.subcmd and decision_step.subcmd["cmd"] == "tip":
         if not Tip().started:
             print("Starting %s tip with target %f" % (decision_step.subcmd["spin"], decision_step.subcmd["target"]))
             Tip().start(Rover, decision_step.subcmd["target"], decision_step.subcmd["spin"])
         elif not Tip().update(Rover):
             print("Done with %s tip to %f" % (decision_step.subcmd["spin"], decision_step.subcmd["target"]))
             decision_step.subcmd = None
-    elif decision_step.subcmd["cmd"] == "goto":
+    elif decision_step.subcmd and decision_step.subcmd["cmd"] == "goto":
         if not Goto().started:
             Goto().start(Rover, decision_step.subcmd["target"])
         elif not Goto().update(Rover):
             decision_step.subcmd = None
-
-    '''
-    if Rover.nav_angles is not None:
-        # Check for Rover.mode status
-        if Rover.mode == 'forward':
-            # Check the extent of navigable terrain
-            if len(Rover.nav_angles) >= Rover.stop_forward:
-                # If mode is forward, navigable terrain looks good
-                # and velocity is below max, then throttle
-                if Rover.vel < Rover.max_vel:
-                    # Set throttle value to throttle setting
-                    #print("Throttle is %d" % Rover.throttle_set)
-                    Rover.throttle = Rover.throttle_set
-                else: # Else coast
-                    #print("Coasting")
-                    Rover.throttle = 0
-                Rover.brake = 0
-                # Set steering to average angle clipped to the range +/- 15
-                wf_offset = 15
-                Rover.steer = np.clip(np.mean(Rover.nav_angles * 180/np.pi) + wf_offset, -15, 15)
-            # If there's a lack of navigable terrain pixels then go to 'stop' mode
-            elif len(Rover.nav_angles) < Rover.stop_forward:
-                    #print("Hit the brakes")
+    elif decision_step.subcmd == None and Rover.subcmds:
+        ### CURRENT SUBCMD ###
+        # If there's no subcmd, pop one from the subcmd queue
+        decision_step.subcmd = Rover.subcmds.pop()
+        print("Popping %s cmd with target " % decision_step.subcmd["cmd"], end='')
+        print(decision_step.subcmd["target"])
+    elif Rover.target:
+        ### SUBCMDS FROM WAYPOINTS ###
+        # Plan subcmd steps with the next point from A* planner
+        if len(decision_step.waypoints) > 0:
+            dest_point = decision_step.waypoints.pop()
+            print("Popping waypoint", end='')
+            print(dest_point)
+            print(Rover.pos)
+            success = point_to_subcmd(Rover, dest_point)
+            if not success and len(decision_step.waypoints) <= 1:
+                print("Unset target b/c already at waypoint")
+                Rover.target = None
+        # If there are no waypoints, plan a path to the target with A*
+        # if there is no target, then unset it
+        elif Rover.target:
+            ### A* PATH PLANNING ###
+            cur_cell = [int(Rover.pos[0]), int(Rover.pos[1])]
+            dest_cell = [int(Rover.target[0]), int(Rover.target[1])]
+            # print("No wp, cur cell and dest cell are ", end='')
+            # print(cur_cell)
+            # print(dest_cell)
+            if cur_cell[0] == dest_cell[0] or cur_cell[1] == dest_cell[1]:
+                print("Unset target, already at %d,%d" % (cur_cell[0],cur_cell[1]))
+                Rover.target = None
+            else:
+                decision_step.waypoints = astar(Rover.bitmap, cur_cell, dest_cell, 1)
+                print("A* wp:")
+                print(decision_step.waypoints)
+                plt.imshow(Rover.bitmap.T, origin='lower')
+                plt.show()
+    # Do non-map-based behaviors
+    else:
+        message = ""
+        # Check if we have vision data to make decisions with
+        if Rover.nav_angles is not None:
+            # Check for Rover.mode status
+            if Rover.mode == 'forward':
+                message += "fwd mode\n"
+                # Check the extent of navigable terrain
+                if len(Rover.nav_angles) >= Rover.stop_forward:
+                    # If mode is forward, navigable terrain looks good
+                    # and velocity is below max, then throttle
+                    if Rover.vel < Rover.max_vel:
+                        # Set throttle value to throttle setting
+                        Rover.throttle = Rover.throttle_set
+                    else: # Else coast
+                        Rover.throttle = 0
+                    Rover.brake = 0
+                    # Set steering to average angle clipped to the range +/- 15
+                    # Rover.steer = np.clip(np.mean(Rover.nav_angles * 180/np.pi), -15, 15)
+                    # wf_offset = 15
+                    wf_offset = 12
+                    Rover.steer = np.clip(np.mean(Rover.nav_angles * 180/np.pi) + wf_offset, -15, 15)
+                # If there's a lack of navigable terrain pixels then go to 'stop' mode
+                elif len(Rover.nav_angles) < Rover.stop_forward:
+                    message += "Switch to stop mode\n"
                     # Set mode to "stop" and hit the brakes!
                     Rover.throttle = 0
                     # Set brake to stored brake value
-                    Rover.debug = "Brake from fwd"
                     Rover.brake = Rover.brake_set
                     Rover.steer = 0
                     Rover.mode = 'stop'
 
-        elif Rover.mode == "goto_rock":
-            print("Goto rock")
-            if Rover.nav_rock_angles is not None:
-                Rover.steer = np.clip(np.mean(Rover.nav_rock_angles * 180/np.pi), -15, 15)
-                approach_scale = 1
-                Rover.throttle = np.mean(Rover.nav_rock_dists)
-                #print(Rover.throttle)
-        # If we're already in "stop" mode then make different decisions
-        elif Rover.mode == 'stop':
-            # If we're in stop mode but still moving keep braking
-            if Rover.vel > 0.2:
-                Rover.throttle = 0
-                Rover.brake = Rover.brake_set
+            # If we're already in "stop" mode then make different decisions
+            elif Rover.mode == 'stop':
+                message += "stop mode\n"
+                # If we're in stop mode but still moving keep braking
+                if Rover.vel > 0.2:
+                    message += "keep braking\n"
+                    Rover.throttle = 0
+                    Rover.brake = Rover.brake_set
+                    Rover.steer = 0
+                # If we're not moving (vel < 0.2) then do something else
+                elif Rover.vel <= 0.2:
+                    # Now we're stopped and we have vision data to see if there's a path forward
+                    if len(Rover.nav_angles) < Rover.go_forward:
+                        message += "do tip\n"
+                        Rover.throttle = 0
+                        # Release the brake to allow turning
+                        Rover.brake = 0
+                        # Turn range is +/- 15 degrees, when stopped the next line will induce 4-wheel turning
+                        Rover.steer = -15 # Could be more clever here about which way to turn
+                    # If we're stopped but see sufficient navigable terrain in front then go!
+                    if len(Rover.nav_angles) >= Rover.go_forward:
+                        # Set throttle back to stored value
+                        Rover.throttle = Rover.throttle_set
+                        # Release the brake
+                        Rover.brake = 0
+                        # Set steer to mean angle
+                        Rover.steer = np.clip(np.mean(Rover.nav_angles * 180/np.pi), -15, 15)
+                        Rover.mode = 'forward'
+                        message += "switch to fwd mode\n"
+            elif Rover.mode == "stuck":
+                message += "stuck mode\n"
+                # Go backward for a few seconds
+                Rover.throttle = -1.0
+                if not decision_step.stuck_go_bwd:
+                    decision_step.stuck_bwd_timestamp = time.time()
+                    decision_step.stuck_go_bwd = True
+                # Tip 45 degrees cw and check stuck mode exit condition
+                elif (time.time() - decision_step.stuck_bwd_timestamp) > 2:
+                    message += "stuck backup done, do tip\n"
+                    decision_step.stuck_go_bwd = False
+                    Rover.throttle = 0
+                    Rover.brake = Rover.brake_set
+                    bwd_escape_deg = Rover.yaw - 45
+                    bwd_escape_deg = clamp_angle(bwd_escape_deg)
+                    tip_subcmd = {"cmd": "tip",  "target": bwd_escape_deg, "spin": "cw"}
+                    decision_step.subcmd = tip_subcmd
+                    if Rover.vel > 0.2:
+                        message += "switch from stuck to forward\n"
+                        decision_step.stuck_timestamp = None
+                        Rover.mode == 'forward'
+                        Rover.throttle = 0
+                        Rover.brake = Rover.brake_set
+
+            # Just to make the rover do something
+            # even if no modifications have been made to the code
+            else:
+                message += "Nike: just do it\n"
+                Rover.throttle = Rover.throttle_set
                 Rover.steer = 0
-                Rover.debug = "Braking from stop; vel " + str(Rover.vel)
-                #print("Braking from stop v=%d" % Rover.vel)
-            # If we're not moving (vel < 0.2) then do something else
-            elif Rover.vel <= 0.2:
-                # Now we're stopped and we have vision data to see if there's a path forward
-                Rover.debug = "Len is " + str(len(Rover.nav_angles))
-                #print("Stop case 2 v=%d" % Rover.vel)
-                if len(Rover.nav_angles) < Rover.go_forward:
-                    # if Rover.throttle == 0:
-                    Rover.debug = "Setting 1/4 throttle"
-                    Rover.throttle = Rover.throttle_set / 4
-                    # else:
-                        # Rover.throttle = 0
-                    # Release the brake to allow turning
-                    Rover.brake = 0
-                    # Turn range is +/- 15 degrees, when stopped the next line will induce 4-wheel turning
-                    Rover.steer = -15 # Could be more clever here about which way to turn
-                # If we're stopped but see sufficient navigable terrain in front then go!
-                if len(Rover.nav_angles) >= Rover.go_forward:
-                    #print("Stop case 2 v=%d" % Rover.vel)
-                    # Set throttle back to stored value
-                    Rover.throttle = Rover.throttle_set
-                    # Release the brake
-                    Rover.brake = 0
-                    # Set steer to mean angle
-                    Rover.steer = np.clip(np.mean(Rover.nav_angles * 180/np.pi), -15, 15)
-                    Rover.mode = 'forward'
-                    Rover.debug = "Fwd, len is " + str(len(Rover.nav_angles))
-        elif Rover.mode == "get_unstuck":
-            print("Get unstuck")
+                Rover.brake = 0
 
-    # Just to make the rover do something
-    # even if no modifications have been made to the code
-    else:
-        Rover.throttle = Rover.throttle_set
-        Rover.steer = 0
-        Rover.brake = 0
-'''
-    # If in a state where want to pickup a rock send pickup command
-    if Rover.near_sample and Rover.vel == 0 and not Rover.picking_up:
-        Rover.send_pickup = True
+        # If in a state where want to pickup a rock send pickup command
+        if Rover.near_sample and Rover.vel == 0 and not Rover.picking_up:
+            Rover.send_pickup = True
 
-    #if True:
-    #    # Do nothing
-    # Rover.throttle = 0
-    # Rover.steer = 0
-    # Rover.brake = 0
-    #    return
+        if decision_step.last_message != message:
+            print(message)
+            decision_step.last_message = message
 
     return Rover
 decision_step.subcmd = None
+decision_step.stuck_pos = None
+decision_step.stuck_timestamp = None
+decision_step.stuck_go_bwd = False
+decision_step.stuck_bwd_timestamp = None
 decision_step.waypoints = []
+decision_step.last_message = ""

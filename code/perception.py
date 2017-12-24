@@ -132,8 +132,8 @@ def perception_step(Rover):
     ])
     # 2) Apply perspective transform
     warped, mask = perspect_transform(Rover.img, source, destination)
-    lookahead = 4 * 10 # 4 meters * 10 pixels/meter
-    mask[0:(Rover.img.shape[0] - bottom_offset - lookahead),:] = 0
+    # lookahead = 4 * 10 # 4 meters * 10 pixels/meter
+    # mask[0:(Rover.img.shape[0] - bottom_offset - lookahead),:] = 0
 
     # 3) Apply color threshold to identify navigable terrain/obstacles/rock samples
     # threshed_obs = color_thresh_obs(warped)
@@ -194,15 +194,15 @@ def perception_step(Rover):
     Rover.nav_dists = navigable_dist
     Rover.nav_angles = navigable_angles
 
-
     if rock_map.any():
-        if np.mean(Rover.nav_rock_dists) < 10:
-            Rover.mode = 'goto_rock'
+        if np.mean(Rover.nav_rock_dists) < 8:
             print("Saw rock")
-    else:
-        Rover.mode = 'forward'
+            # Rover.mode = 'goto_rock'
+
     # if Rover.last_yaw != Rover.yaw:
-    if not Rover.target:
+    # DHT: disable overmind for now
+    use_overmind = False
+    if use_overmind and not Rover.target:
         goal_x, goal_y = overmind(Rover)
         Rover.target = [goal_x, goal_y]
         plt.imshow(Rover.bitmap.T, origin='lower')
