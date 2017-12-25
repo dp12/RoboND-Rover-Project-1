@@ -66,7 +66,8 @@ class Tip():
         elif Tip.spin == 'cw':
             print("Rover steer=%f y=%f" % (Rover.steer, Rover.yaw))
             # if Rover.yaw < Tip.target_deg or abs(Rover.yaw - Tip.target_deg) < TIP_TOLERANCE:
-            cw_angle_exceeded = ((Tip.target_deg <= Tip.start_yaw) and (Rover.yaw < Tip.target_deg)) or ((Tip.target_deg > Tip.start_yaw) and (Rover.yaw > Tip.start_yaw) and (Rover.yaw < Tip.target_deg))
+            # cw_angle_exceeded = ((Tip.target_deg <= Tip.start_yaw) and (Rover.yaw < Tip.target_deg)) or ((Tip.target_deg > Tip.start_yaw) and (Rover.yaw > Tip.start_yaw) and (Rover.yaw < Tip.target_deg))
+            cw_angle_exceeded = False
             if abs(Rover.yaw - Tip.target_deg) < TIP_TOLERANCE or cw_angle_exceeded:
                 Rover.steer = 0
                 print("Tip done %f < %f exc=%d" % (Rover.yaw, Tip.target_deg, cw_angle_exceeded))
@@ -79,7 +80,8 @@ class Tip():
         elif Tip.spin == 'ccw':
             print("Rover steer=%f y=%f" % (Rover.steer, Rover.yaw))
             # if Rover.yaw > Tip.target_deg or abs(Rover.yaw - Tip.target_deg) < TIP_TOLERANCE:
-            ccw_angle_exceeded = ((Tip.target_deg >= Tip.start_yaw) and (Rover.yaw > Tip.target_deg)) or ((Tip.target_deg < Tip.start_yaw) and (Rover.yaw < Tip.start_yaw) and (Rover.yaw > Tip.target_deg))
+            # ccw_angle_exceeded = ((Tip.target_deg >= Tip.start_yaw) and (Rover.yaw > Tip.target_deg)) or ((Tip.target_deg < Tip.start_yaw) and (Rover.yaw < Tip.start_yaw) and (Rover.yaw > Tip.target_deg))
+            ccw_angle_exceeded = False
             if abs(Rover.yaw - Tip.target_deg) < TIP_TOLERANCE or ccw_angle_exceeded:
                 Rover.steer = 0
                 print("Tip done %f > %f exc=%d" % (Rover.yaw, Tip.target_deg, ccw_angle_exceeded))
@@ -231,7 +233,7 @@ def decision_step(Rover):
     # Check for stuck condition
     STUCK_DETECTION_TIME = 5 #seconds
     if Rover.mode != "stuck":
-        if Rover.throttle > 0 and abs(Rover.steer) > 2 and Rover.vel <= 0.15:
+        if Rover.throttle > 0 and abs(Rover.steer) > 3 and Rover.vel <= 0.15:
             print("Stuck maybe thr=%f steer=%f vel=%f" % (Rover.throttle, abs(Rover.steer), Rover.vel))
             if not decision_step.stuck_timestamp:
                 print("Stuck timeout started")
@@ -241,7 +243,7 @@ def decision_step(Rover):
                 int(Rover.pos[1]) == int(decision_step.stuck_pos[1]))):
                 print("Stuck mode activation")
                 Rover.mode = "stuck"
-        elif Rover.vel >= 0.2:
+        elif decision_step.stuck_timestamp and Rover.vel >= 0.2:
             print("Stuck timestamp reset")
             decision_step.stuck_timestamp = None
 
@@ -357,7 +359,33 @@ def decision_step(Rover):
                         Rover.mode = 'forward'
                         message += "switch to fwd mode\n"
             elif Rover.mode == "stuck":
-                message += "stuck mode\n"
+                STUCK_TURN_DEG = 45
+                # stuck_target_yaw
+                # stuck_start_yaw
+                if decision_step.stuck_target_yaw == None:
+                    decision_step.stuck_start_yaw = Rover.yaw
+                    decision_step.stuck_target_yaw = Rover.yaw - STUCK_TURN_DEG
+                    Rover.brake = Rover.brake_set
+                else:
+                    message += "stuck mode {0}-->{1}  start:{2}\n".format(Rover.yaw, decision_step.stuck_target_yaw, decision_step.stuck_start_yaw)
+                    Rover.steer = -15
+                    Rover.throttle = 0
+                    Rover.brake = 0
+                    if ((decision_step.stuck_target_yaw <= decision_step.stuck_start_yaw and Rover.yaw < decision_step.stuck_target_yaw) or (decision_step.stuck_target_yaw > decision_step.stuck_start_yaw and Rover.yaw > decision_step.stuck_start_yaw and Rover.yaw < decision_step.stuck_target_yaw)):
+                        Rover.throttle = 0
+                        Rover.steer = 0
+                        Rover.brake = Rover.brake_set
+                        decision_step.stuck_target_yaw = None
+                        message += "stuck mode end start:{0}, targ:{1} yaw:{2}".format(decision_step.stuck_start_yaw, decision_step.stuck_target_yaw, Rover.yaw)
+                        decision_step.stuck_timestamp = None
+                        Rover.mode = "forward"
+                # bwd_escape_deg = Rover.yaw - 45
+                # bwd_escape_deg = clamp_angle(bwd_escape_deg)
+                # tip_subcmd = {"cmd": "tip",  "target": bwd_escape_deg, "spin": "cw"}
+                # decision_step.subcmd = tip_subcmd
+                # decision_step.stuck_timestamp = None
+                # Rover.mode = 'forward'
+                '''
                 # Go backward for a few seconds
                 Rover.throttle = -1.0
                 if not decision_step.stuck_go_bwd:
@@ -373,13 +401,13 @@ def decision_step(Rover):
                     bwd_escape_deg = clamp_angle(bwd_escape_deg)
                     tip_subcmd = {"cmd": "tip",  "target": bwd_escape_deg, "spin": "cw"}
                     decision_step.subcmd = tip_subcmd
-                    if Rover.vel > 0.2:
+                    if abs(Rover.vel > 0.2):
                         message += "switch from stuck to forward\n"
                         decision_step.stuck_timestamp = None
                         Rover.mode == 'forward'
                         Rover.throttle = 0
                         Rover.brake = Rover.brake_set
-
+                '''
             # Just to make the rover do something
             # even if no modifications have been made to the code
             else:
@@ -399,6 +427,8 @@ def decision_step(Rover):
     return Rover
 decision_step.subcmd = None
 decision_step.stuck_pos = None
+decision_step.stuck_start_yaw = None
+decision_step.stuck_target_yaw = None
 decision_step.stuck_timestamp = None
 decision_step.stuck_go_bwd = False
 decision_step.stuck_bwd_timestamp = None

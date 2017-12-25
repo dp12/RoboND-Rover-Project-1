@@ -40,10 +40,13 @@ class RoverState():
     def __init__(self):
         self.nav_rock_angles = None ### Angles of rock terrain pixels
         self.nav_rock_dists = None ### Distances of rock terrain pixels
+        self.obs_dists = None
+        self.obs_angles = None
         self.saw_rock = False ###
         self.debug = "" ###
         self.subcmds = [] ### subcmds such as goto-cell or tip
         self.target = None ### map-based target
+        self.last_yaw = None ### The last yaw angle
         ### END of custom variables
 
         self.start_time = None # To record the start time of navigation
@@ -51,7 +54,6 @@ class RoverState():
         self.img = None # Current camera image
         self.pos = None # Current position (x, y)
         self.yaw = None # Current yaw angle
-        self.last_yaw = None ### The last yaw angle
         self.pitch = None # Current pitch angle
         self.roll = None # Current roll angle
         self.vel = None # Current velocity

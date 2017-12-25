@@ -164,12 +164,25 @@ def perception_step(Rover):
         # Example: Rover.worldmap[obstacle_y_world, obstacle_x_world, 0] += 1
         #          Rover.worldmap[rock_y_world, rock_x_world, 1] += 1
         #          Rover.worldmap[navigable_y_world, navigable_x_world, 2] += 1
-    Rover.worldmap[navigable_y_world, navigable_x_world, 2] = 255
-    Rover.worldmap[obs_y_world, obs_x_world, 0] = 255
-    Rover.bitmap[obs_x_world, obs_y_world] = Cell.OBSTACLE
     nav_pix = Rover.worldmap[:,:,2] > 0
-    Rover.worldmap[nav_pix, 0] = 0
-
+    # WM_THRES = 0.5 # max angle to allow worldmap updates
+    WM_THRES = 1 # max angle to allow worldmap updates
+    map_update_allowed = ((Rover.roll < WM_THRES or Rover.roll > (360-WM_THRES)) and (Rover.pitch < WM_THRES or Rover.pitch > (360-WM_THRES)))
+    if map_update_allowed:
+        # '''
+        # channel 2 is for navigable terrain, remove obstacle pixels
+        Rover.worldmap[navigable_y_world, navigable_x_world, 2] = 255
+        Rover.worldmap[obs_y_world, obs_x_world, 2] -= 255
+        # channel 0 is for obstacles, remove navigable pixels
+        Rover.worldmap[navigable_y_world, navigable_x_world, 0] -= 255
+        Rover.worldmap[obs_y_world, obs_x_world, 0] += 255
+        # '''
+        '''
+        Rover.worldmap[navigable_y_world, navigable_x_world, 2] = 255
+        Rover.worldmap[obs_y_world, obs_x_world, 0] = 255
+        Rover.worldmap[nav_pix, 0] = 0
+        '''
+    Rover.bitmap[obs_x_world, obs_y_world] = Cell.OBSTACLE
     Rover.bitmap[int(Rover.pos[0]), int(Rover.pos[1])] = Cell.SELF
     Rover.bitmap[navigable_x_world, navigable_y_world] = Cell.FREE
 
@@ -177,7 +190,8 @@ def perception_step(Rover):
     if rock_map.any():
         rock_x, rock_y = rover_coords(rock_map)
         rock_x_world, rock_y_world = pix_to_world(rock_x, rock_y, Rover.pos[0], Rover.pos[1], Rover.yaw, world_size, scale)
-        Rover.worldmap[rock_y_world, rock_x_world, :] = 255
+        if map_update_allowed:
+            Rover.worldmap[rock_y_world, rock_x_world, :] = 255
 
         # Rover.bitmap[rock_y_world, rock_x_world] = Cell.ROCK
         Rover.bitmap[rock_x_world, rock_y_world] = Cell.ROCK
@@ -194,6 +208,10 @@ def perception_step(Rover):
     Rover.nav_dists = navigable_dist
     Rover.nav_angles = navigable_angles
 
+    obs_dist, obs_angles = to_polar_coords(obs_x_rover, obs_y_rover)
+    Rover.obs_dists = obs_dist
+    Rover.obs_angles = obs_angles
+
     if rock_map.any():
         if np.mean(Rover.nav_rock_dists) < 8:
             print("Saw rock")
@@ -202,6 +220,7 @@ def perception_step(Rover):
     # if Rover.last_yaw != Rover.yaw:
     # DHT: disable overmind for now
     use_overmind = False
+    # use_overmind = True
     if use_overmind and not Rover.target:
         goal_x, goal_y = overmind(Rover)
         Rover.target = [goal_x, goal_y]
