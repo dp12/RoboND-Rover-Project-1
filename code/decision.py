@@ -378,28 +378,55 @@ def decision_step(Rover):
                 STUCK_TURN_DEG = 45 #ccw
                 # stuck_target_yaw
                 # stuck_start_yaw
-                if decision_step.stuck_target_yaw == None:
-                    decision_step.stuck_start_yaw = Rover.yaw
-                    decision_step.stuck_target_yaw = clamp_angle(Rover.yaw + STUCK_TURN_DEG)
-                    Rover.brake = Rover.brake_set
-                else:
-                    message += "stuck mode {0}-->{1}  start:{2}\n".format(Rover.yaw, decision_step.stuck_target_yaw, decision_step.stuck_start_yaw)
-                    # Rover.steer = -15 #cw
-                    Rover.steer = 15 #ccw
-                    Rover.throttle = 0
-                    Rover.brake = 0
-                    # simple_exit = (decision_step.stuck_target_yaw <= decision_step.stuck_start_yaw and Rover.yaw < decision_step.stuck_target_yaw) #cw
-                    simple_exit = (decision_step.stuck_target_yaw >= decision_step.stuck_start_yaw and Rover.yaw > decision_step.stuck_target_yaw) #ccw
-                    # complex_exit = (decision_step.stuck_target_yaw > decision_step.stuck_start_yaw and Rover.yaw > decision_step.stuck_start_yaw and Rover.yaw < decision_step.stuck_target_yaw) #ccw
-                    complex_exit = (decision_step.stuck_target_yaw < decision_step.stuck_start_yaw and Rover.yaw < decision_step.stuck_start_yaw and Rover.yaw > decision_step.stuck_target_yaw) #cw
-                    if (simple_exit or complex_exit):
-                        Rover.throttle = 0
-                        Rover.steer = 0
+                if decision_step.stuck_mode == "hunt":
+                    if decision_step.stuck_target_yaw == None:
+                        message += "stuck mode start hunt\n"
+                        decision_step.stuck_start_pos = Rover.pos
+                        decision_step.stuck_start_yaw = Rover.yaw
+                        decision_step.stuck_target_yaw = clamp_angle(Rover.yaw + STUCK_TURN_DEG)
                         Rover.brake = Rover.brake_set
-                        decision_step.stuck_target_yaw = None
-                        message += "stuck mode end start:{0}, targ:{1} yaw:{2}".format(decision_step.stuck_start_yaw, decision_step.stuck_target_yaw, Rover.yaw)
-                        decision_step.stuck_timestamp = None
-                        Rover.mode = "forward"
+                    else:
+                        message += "stuck mode {0}-->{1}  start:{2}\n".format(Rover.yaw, decision_step.stuck_target_yaw, decision_step.stuck_start_yaw)
+                        # Rover.steer = -15 #cw
+                        Rover.steer = 15 #ccw
+                        Rover.throttle = 0
+                        Rover.brake = 0
+                        # simple_exit = (decision_step.stuck_target_yaw <= decision_step.stuck_start_yaw and Rover.yaw < decision_step.stuck_target_yaw) #cw
+                        simple_exit = (decision_step.stuck_target_yaw >= decision_step.stuck_start_yaw and Rover.yaw > decision_step.stuck_target_yaw) #ccw
+                        # complex_exit = (decision_step.stuck_target_yaw > decision_step.stuck_start_yaw and Rover.yaw > decision_step.stuck_start_yaw and Rover.yaw < decision_step.stuck_target_yaw) #ccw
+                        complex_exit = (decision_step.stuck_target_yaw < decision_step.stuck_start_yaw and Rover.yaw < decision_step.stuck_start_yaw and Rover.yaw > decision_step.stuck_target_yaw) #cw
+                        if (simple_exit or complex_exit):
+                            message += "stuck mode switch to peck from hunt"
+                            Rover.throttle = 0
+                            Rover.steer = 0
+                            Rover.brake = Rover.brake_set
+                            decision_step.stuck_target_yaw = None
+                            decision_step.stuck_mode = "peck"
+                            # Rover.mode = "forward"
+                elif decision_step.stuck_mode == "peck":
+                    Rover.throttle = 1.0
+                    Rover.brake = 0
+                    Rover.steer = 0
+                    if decision_step.stuck_peck_timestamp == None:
+                        message += "stuck mode start peck"
+                        decision_step.stuck_peck_timestamp = time.time()
+                    elif((time.time() - decision_step.stuck_peck_timestamp) > 3):
+                        if int(Rover.pos[0]) == int(decision_step.stuck_start_pos[0]) and int(Rover.pos[1]) == int(decision_step.stuck_start_pos[1]):
+                            decision_step.stuck_mode = "hunt"
+                            Rover.brake = Rover.brake_set
+                            Rover.throttle = 0
+                            decision_step.stuck_peck_timestamp = None
+                            message += "stuck mode switch to hunt from peck"
+                        else:
+                            Rover.throttle = 0
+                            Rover.brake = Rover.brake_set
+                            Rover.steer = 0
+                            decision_step.stuck_timestamp = None
+                            decision_step.stuck_target_yaw = None
+                            decision_step.stuck_peck_timestamp = None
+                            decision_step.stuck_mode = "hunt"
+                            message += "stuck mode end:: start:{0}, targ:{1} yaw:{2}".format(decision_step.stuck_start_yaw, decision_step.stuck_target_yaw, Rover.yaw)
+                            Rover.mode = "forward"
                 # bwd_escape_deg = Rover.yaw - 45
                 # bwd_escape_deg = clamp_angle(bwd_escape_deg)
                 # tip_subcmd = {"cmd": "tip",  "target": bwd_escape_deg, "spin": "cw"}
@@ -453,5 +480,7 @@ decision_step.stuck_target_yaw = None
 decision_step.stuck_timestamp = None
 decision_step.stuck_go_bwd = False
 decision_step.stuck_bwd_timestamp = None
+decision_step.stuck_mode = "hunt"
+decision_step.stuck_peck_timestamp = None
 decision_step.waypoints = []
 decision_step.last_message = ""
