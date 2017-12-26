@@ -190,7 +190,9 @@ class Goto():
 
 # Restrict angle to range [0,360]
 def clamp_angle(degrees):
-    return degrees + 360 if degrees < 0 else degrees
+    if degrees < 0:     return degrees + 360
+    elif degrees > 360: return degrees - 360
+    else:               return degrees
 
 def point_to_subcmd(Rover, end_pt):
     SAME_ANGLE_TOLERANCE = 1 #prev 0.5
@@ -317,7 +319,20 @@ def decision_step(Rover):
                     # Set steering to average angle clipped to the range +/- 15
                     # Rover.steer = np.clip(np.mean(Rover.nav_angles * 180/np.pi), -15, 15)
                     # wf_offset = 15
-                    wf_offset = 12
+                    # OBS_CONE_DEG = 20
+                    # OBS_CONE_DEG = 0.22
+                    OBS_CONE_DEG = 0.22
+                    OBS_CONE_DIST = 129
+                    # OBS_WF_OFFSET = -15
+                    OBS_WF_OFFSET = -90
+                    mean_obs_angle = np.mean(Rover.obs_angles * 180/np.pi)
+                    if (mean_obs_angle < OBS_CONE_DEG or mean_obs_angle > 360 - OBS_CONE_DEG) and np.mean(Rover.obs_dists) < OBS_CONE_DIST:
+                        obsdet_offset = OBS_WF_OFFSET
+                        # print("obsdet mean %f (%f,%f) and dist %f (%f,%f)" % (mean_obs_angle, min(Rover.obs_angles) * 180/np.pi, max(Rover.obs_angles) * 180/np.pi, np.mean(Rover.obs_dists), min(Rover.obs_dists), max(Rover.obs_dists)))
+                        print("obsdet mean %f and dist %f (%f,%f), adding %f" % (mean_obs_angle, np.mean(Rover.obs_dists), min(Rover.obs_dists), max(Rover.obs_dists), obsdet_offset))
+                    else:
+                        obsdet_offset = 0
+                    wf_offset = 12 + obsdet_offset
                     Rover.steer = np.clip(np.mean(Rover.nav_angles * 180/np.pi) + wf_offset, -15, 15)
                 # If there's a lack of navigable terrain pixels then go to 'stop' mode
                 elif len(Rover.nav_angles) < Rover.stop_forward:
@@ -359,19 +374,25 @@ def decision_step(Rover):
                         Rover.mode = 'forward'
                         message += "switch to fwd mode\n"
             elif Rover.mode == "stuck":
-                STUCK_TURN_DEG = 45
+                # STUCK_TURN_DEG = -45 #cw
+                STUCK_TURN_DEG = 45 #ccw
                 # stuck_target_yaw
                 # stuck_start_yaw
                 if decision_step.stuck_target_yaw == None:
                     decision_step.stuck_start_yaw = Rover.yaw
-                    decision_step.stuck_target_yaw = clamp_angle(Rover.yaw - STUCK_TURN_DEG)
+                    decision_step.stuck_target_yaw = clamp_angle(Rover.yaw + STUCK_TURN_DEG)
                     Rover.brake = Rover.brake_set
                 else:
                     message += "stuck mode {0}-->{1}  start:{2}\n".format(Rover.yaw, decision_step.stuck_target_yaw, decision_step.stuck_start_yaw)
-                    Rover.steer = -15
+                    # Rover.steer = -15 #cw
+                    Rover.steer = 15 #ccw
                     Rover.throttle = 0
                     Rover.brake = 0
-                    if ((decision_step.stuck_target_yaw <= decision_step.stuck_start_yaw and Rover.yaw < decision_step.stuck_target_yaw) or (decision_step.stuck_target_yaw > decision_step.stuck_start_yaw and Rover.yaw > decision_step.stuck_start_yaw and Rover.yaw < decision_step.stuck_target_yaw)):
+                    # simple_exit = (decision_step.stuck_target_yaw <= decision_step.stuck_start_yaw and Rover.yaw < decision_step.stuck_target_yaw) #cw
+                    simple_exit = (decision_step.stuck_target_yaw >= decision_step.stuck_start_yaw and Rover.yaw > decision_step.stuck_target_yaw) #ccw
+                    # complex_exit = (decision_step.stuck_target_yaw > decision_step.stuck_start_yaw and Rover.yaw > decision_step.stuck_start_yaw and Rover.yaw < decision_step.stuck_target_yaw) #ccw
+                    complex_exit = (decision_step.stuck_target_yaw < decision_step.stuck_start_yaw and Rover.yaw < decision_step.stuck_start_yaw and Rover.yaw > decision_step.stuck_target_yaw) #cw
+                    if (simple_exit or complex_exit):
                         Rover.throttle = 0
                         Rover.steer = 0
                         Rover.brake = Rover.brake_set

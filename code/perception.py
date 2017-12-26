@@ -172,10 +172,10 @@ def perception_step(Rover):
         # '''
         # channel 2 is for navigable terrain, remove obstacle pixels
         Rover.worldmap[navigable_y_world, navigable_x_world, 2] = 255
-        Rover.worldmap[obs_y_world, obs_x_world, 2] -= 255
+        Rover.worldmap[obs_y_world, obs_x_world, 2] = 0
         # channel 0 is for obstacles, remove navigable pixels
-        Rover.worldmap[navigable_y_world, navigable_x_world, 0] -= 255
-        Rover.worldmap[obs_y_world, obs_x_world, 0] += 255
+        Rover.worldmap[navigable_y_world, navigable_x_world, 0] = 0
+        Rover.worldmap[obs_y_world, obs_x_world, 0] = 255
         # '''
         '''
         Rover.worldmap[navigable_y_world, navigable_x_world, 2] = 255
