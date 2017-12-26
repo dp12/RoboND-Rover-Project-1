@@ -364,7 +364,7 @@ def decision_step(Rover):
                 # stuck_start_yaw
                 if decision_step.stuck_target_yaw == None:
                     decision_step.stuck_start_yaw = Rover.yaw
-                    decision_step.stuck_target_yaw = Rover.yaw - STUCK_TURN_DEG
+                    decision_step.stuck_target_yaw = clamp_angle(Rover.yaw - STUCK_TURN_DEG)
                     Rover.brake = Rover.brake_set
                 else:
                     message += "stuck mode {0}-->{1}  start:{2}\n".format(Rover.yaw, decision_step.stuck_target_yaw, decision_step.stuck_start_yaw)
